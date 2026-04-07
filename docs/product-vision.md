@@ -17,14 +17,14 @@ THE
 GitMap is a visual mapping assistant web application for GitHub
 
 THAT
-kldjfiowejflkwejflkw
+Helps the coder to gain knowledge about the project that they just joined
 
 UNLIKE
-
+Other products that only makes comments and explains previous code and structure in text
 
 OUR PRODUCT
-
+explains previous structure in graphs which is very clear
 
 POWERED BY
+OpenAI Api and other graph generating Api
 
-Yanqi Liu Email: yliu30@scu.edu 4085906705
