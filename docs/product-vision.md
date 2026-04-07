@@ -27,3 +27,4 @@ OUR PRODUCT
 
 POWERED BY
 
+Yanqi Liu Email: yliu30@scu.edu 4085906705
