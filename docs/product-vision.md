@@ -5,3 +5,25 @@ The AI capability to analyzes repository and explains the architecture, main mod
 How it Works: User uploads repo → backend analyzes files → AI generates architecture summary.
 This is different from Claude because it analyzes entire codebase structure, not just writing code.
 
+
+Product Vision Statement
+FOR
+coders who have joined a GitHub product that already has implemented functions and large codebases
+
+WHO
+struggle with unfamiliar backgrounds in the codes functionality and connections outside of their assigned parts
+
+THE
+GitMap is a visual mapping assistant web application for GitHub
+
+THAT
+
+
+UNLIKE
+
+
+OUR PRODUCT
+
+
+POWERED BY
+
