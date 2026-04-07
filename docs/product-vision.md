@@ -5,3 +5,4 @@ The AI capability to analyzes repository and explains the architecture, main mod
 How it Works: User uploads repo → backend analyzes files → AI generates architecture summary.
 This is different from Claude because it analyzes entire codebase structure, not just writing code.
 
+Yanqi Liu Email: yliu30@scu.edu 4085906705
