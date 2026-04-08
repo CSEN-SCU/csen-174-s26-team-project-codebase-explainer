@@ -17,7 +17,7 @@ THE
 GitMap is a visual mapping assistant web application for GitHub
 
 THAT
-Helps the coder to gain knowledge about the project that they just joined
+Helps the coder to gain knowledge about the project that they just joined.
 
 UNLIKE
 Other products that only makes comments and explains previous code and structure in text
