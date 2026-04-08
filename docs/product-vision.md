@@ -23,7 +23,7 @@ UNLIKE
 Other products that only makes comments and explains previous code and structure in text
 
 OUR PRODUCT
-explains previous structure in graphs which is very clear.
+explains previous structure in graphs which is very clear
 
 POWERED BY
 OpenAI Api and other graph generating Api
