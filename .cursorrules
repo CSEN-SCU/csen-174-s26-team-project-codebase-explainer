@@ -1,0 +1,85 @@
+# GitMap — Cursor AI Instructions
+
+## Product Vision
+See `product-vision.md` for the full product vision, Moore's template, How Might We statement,
+and key insights from the Problem Framing Canvas.
+
+**One-line summary:** GitMap turns any GitHub repo URL into an interactive visual graph of its
+architecture, so developers new to a codebase can understand how everything connects without
+reading thousands of lines of code.
+
+---
+
+## Project Structure
+
+```
+prototypes/          # One subdirectory per team member — each person's independent prototype
+  sally/
+    backend/         # Python FastAPI backend
+    frontend/        # HTML/CSS/JS frontend (single-file, no build step)
+    README.md        # How to run this prototype
+  [teammate]/
+    ...
+product-vision.md    # Shared product vision — update here, reference everywhere else
+.cursorrules         # This file — AI context for the whole repo
+.gitignore           # Excludes .env files and other secrets everywhere in the tree
+```
+
+During the prototype phase each team member works in their own `prototypes/[name]/` directory.
+Tech stacks may differ across prototypes. Consolidation happens later.
+
+---
+
+## Core Domain Concepts
+
+These terms have specific meaning in this project — use them consistently:
+
+- **Repo** — the GitHub repository being analyzed (the *input* to GitMap)
+- **Analysis** — the result of running AI over a repo: summary, tech stack, nodes, edges
+- **Node** — a logical component in the codebase (module, service, config, entrypoint, external dependency, database, test)
+- **Edge** — a directed relationship between nodes (imports, calls, extends, configures, stores)
+- **Graph** — the full set of nodes + edges that represents the repo's architecture
+- **File tree** — the raw list of all file paths in the repo (fetched from GitHub API before analysis)
+
+Node types and their meaning:
+| Type        | Meaning                                              |
+|-------------|------------------------------------------------------|
+| entrypoint  | Main application entry (main.py, index.js, etc.)    |
+| module      | A logical code module or feature area                |
+| service     | A distinct service or API layer                      |
+| config      | Configuration files and environment setup            |
+| external    | Third-party APIs or services the code calls out to   |
+| database    | Data persistence layer                               |
+| test        | Test suite or testing infrastructure                 |
+
+---
+
+## AI Integration
+
+- The AI call analyzes repo content and returns structured JSON: `{ summary, tech_stack, nodes, edges }`
+- Keep the prompt focused on architecture — we want 5–15 nodes max, not one node per file
+- Results are cached in SQLite so repeated requests don't burn API quota
+- Prototype uses OpenAI GPT-4o; the team may switch models during consolidation
+
+---
+
+## Conventions (prototype phase)
+
+- **Secrets:** Never hardcode API keys. Use `.env` files (excluded by `.gitignore`). Always provide a `.env.example` showing required variable names without values.
+- **Python:** Use `async`/`await` for I/O-bound operations (GitHub API calls, OpenAI calls). FastAPI + uvicorn is the reference backend stack.
+- **Frontend:** Prefer single-file HTML with inline JS/CSS for prototypes — no build step keeps things runnable with zero setup.
+- **Graph data shape:** Always use the canonical `{ nodes: [...], edges: [...] }` shape so visualization components are swappable.
+- **Error handling:** Surface errors clearly to the user (HTTP status codes on the API, visible error messages in the UI). Don't swallow exceptions silently.
+- **Comments:** Explain *why*, not *what*. Code should be readable enough that the *what* is obvious.
+
+---
+
+## What GitMap Is Not
+
+- Not a code linter or static analysis tool
+- Not a full documentation generator
+- Not a real-time collaboration tool
+- Not trying to show every file — the goal is *meaningful abstraction*, not exhaustive detail
+
+When suggesting code, keep these constraints in mind. Suggestions that add complexity without
+serving the core use case (new developer understands the repo quickly) should be reconsidered.

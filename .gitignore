@@ -1,3 +1,40 @@
-# Local secrets — never commit
-backend/.env
+# ── Secrets — NEVER commit these ─────────────────────────────
+# Matches .env anywhere in the directory tree
+**/.env
 .env
+
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# ── Node / JS ─────────────────────────────────────────────────
+node_modules/
+.next/
+dist/
+.nuxt/
+
+# ── Databases ─────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── OS ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ── IDE / editors ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
