@@ -1,120 +1,71 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>CodeMap - Explain Mode</title>
+<meta charset="UTF-8">
+<title>GitMap</title>
 
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      background: #f5f5f5;
-    }
-
-    header {
-      background: #222;
-      color: white;
-      padding: 20px;
-      text-align: center;
-    }
-
-    .container {
-      max-width: 800px;
-      margin: 40px auto;
-      background: white;
-      padding: 30px;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
-    }
-
-    input {
-      width: 70%;
-      padding: 10px;
-      font-size: 16px;
-      margin-right: 10px;
-    }
-
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      background: #007BFF;
-      color: white;
-      border: none;
-      cursor: pointer;
-      border-radius: 5px;
-    }
-
-    #result {
-      margin-top: 30px;
-      padding: 20px;
-      background: #f0f0f0;
-      border-radius: 5px;
-      white-space: pre-wrap;
-    }
-
-    .intro {
-      margin-bottom: 20px;
-      padding: 15px;
-      background: #eef6ff;
-      border-left: 5px solid #007BFF;
-    }
-  </style>
+<style>
+body {
+    background:#1e1e2f;
+    color:white;
+    font-family:Arial;
+    padding:40px;
+}
+textarea {
+    width:100%;
+    height:150px;
+    padding:10px;
+}
+button {
+    margin-top:10px;
+    padding:10px;
+}
+.card {
+    margin-top:20px;
+    background:#2f3640;
+    padding:15px;
+    border-radius:10px;
+}
+</style>
 </head>
 
 <body>
 
-<header>
-  <h1>CodeMap (Explain Mode)</h1>
-</header>
+<h1>🚀 GitMap Analyzer</h1>
 
-<div class="container">
 
-  <div class="intro">
-    <h2>What is CodeMap?</h2>
-    <p>
-      CodeMap helps developers understand unfamiliar codebases by generating a structured explanation of the system architecture.
-    </p>
-    <p>
-      Enter a GitHub repo URL → get a clear breakdown of modules, relationships, and where to start.
-    </p>
-  </div>
-
-  <input type="text" id="repoInput" placeholder="Enter GitHub repo URL...">
-  <button onclick="generate()">Analyze</button>
-
-  <div id="result">
-Your explanation will appear here...
-  </div>
-
+<div class="card">
+This tool analyzes code structure and uses AI to explain it.
 </div>
 
+<textarea id="input"></textarea>
+<button onclick="run()">Analyze</button>
+
+<div id="result"></div>
+
 <script>
-async function generate() {
-  const repo = document.getElementById("repoInput").value;
-  const resultDiv = document.getElementById("result");
+function run() {
+    const text = document.getElementById("input").value;
 
-  if (!repo) {
-    resultDiv.innerText = "Please enter a repository URL.";
-    return;
-  }
+    document.getElementById("result").innerHTML = "Analyzing...";
 
-  resultDiv.innerText = "Analyzing repository...";
+    fetch("http://localhost:8080", {
+        method:"POST",
+        body:text
+    })
+    .then(r=>r.json())
+    .then(data=>{
+        let html = `<div class="card"><b>Functions:</b><br>`;
+        data.functions.forEach(f => html += f + "<br>");
+        html += "</div>";
 
-  try {
-    const response = await fetch("http://localhost:8080/analyze", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ repo: repo })
+        html += `<div class="card"><b>AI:</b><br>${data.ai}</div>`;
+
+        document.getElementById("result").innerHTML = html;
+    })
+    .catch(()=>{
+        document.getElementById("result").innerHTML = "❌ Error";
     });
-
-    const data = await response.json();
-    resultDiv.innerText = data.result;
-
-  } catch (error) {
-    resultDiv.innerText = "Error connecting to backend.";
-  }
 }
 </script>
 
