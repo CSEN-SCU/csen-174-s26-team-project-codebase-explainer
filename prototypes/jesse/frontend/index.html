@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>CodeMap</title>
+  <title>CodeMap - Explain Mode</title>
 
   <style>
     body {
@@ -27,10 +27,6 @@
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
 
-    h1 {
-      margin-top: 0;
-    }
-
     input {
       width: 70%;
       padding: 10px;
@@ -48,20 +44,16 @@
       border-radius: 5px;
     }
 
-    button:hover {
-      background: #0056b3;
-    }
-
     #result {
       margin-top: 30px;
-      padding: 15px;
+      padding: 20px;
       background: #f0f0f0;
       border-radius: 5px;
       white-space: pre-wrap;
     }
 
     .intro {
-      margin-bottom: 30px;
+      margin-bottom: 20px;
       padding: 15px;
       background: #eef6ff;
       border-left: 5px solid #007BFF;
@@ -72,69 +64,58 @@
 <body>
 
 <header>
-  <h1>CodeMap</h1>
+  <h1>CodeMap (Explain Mode)</h1>
 </header>
 
 <div class="container">
 
-  <!-- Intro Screen -->
   <div class="intro">
     <h2>What is CodeMap?</h2>
     <p>
-      CodeMap helps developers quickly understand unfamiliar codebases by generating a visual representation of the system architecture.
+      CodeMap helps developers understand unfamiliar codebases by generating a structured explanation of the system architecture.
     </p>
-
-    <h3>How to use:</h3>
     <p>
-      Enter a GitHub repository URL and click "Generate" to see the architecture.
+      Enter a GitHub repo URL → get a clear breakdown of modules, relationships, and where to start.
     </p>
   </div>
 
-  <!-- Input -->
   <input type="text" id="repoInput" placeholder="Enter GitHub repo URL...">
-  <button onclick="generate()">Generate</button>
+  <button onclick="generate()">Analyze</button>
 
-  <!-- Output -->
   <div id="result">
-    Your architecture result will appear here...
+Your explanation will appear here...
   </div>
 
 </div>
 
 <script>
-  async function generate() {
-    const repo = document.getElementById("repoInput").value;
-    const resultDiv = document.getElementById("result");
+async function generate() {
+  const repo = document.getElementById("repoInput").value;
+  const resultDiv = document.getElementById("result");
 
-    if (!repo) {
-      resultDiv.innerText = "Please enter a repository URL.";
-      return;
-    }
-
-    resultDiv.innerText = "Generating architecture...";
-
-    try {
-      const fakeResponse = `
-Main Modules:
-- /src/components
-- /src/utils
-- app.js
-
-Relationships:
-- app.js uses components
-- components use utils
-
-Architecture:
-Client → App → Components → Utils
-      `;
-      setTimeout(() => {
-        resultDiv.innerText = fakeResponse;
-      }, 1000);
-
-    } catch (error) {
-      resultDiv.innerText = "Error generating architecture.";
-    }
+  if (!repo) {
+    resultDiv.innerText = "Please enter a repository URL.";
+    return;
   }
+
+  resultDiv.innerText = "Analyzing repository...";
+
+  try {
+    const response = await fetch("http://localhost:8080/analyze", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ repo: repo })
+    });
+
+    const data = await response.json();
+    resultDiv.innerText = data.result;
+
+  } catch (error) {
+    resultDiv.innerText = "Error connecting to backend.";
+  }
+}
 </script>
 
 </body>
