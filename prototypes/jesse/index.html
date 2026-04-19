@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CodeMap</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: #f5f5f5;
+    }
+
+    header {
+      background: #222;
+      color: white;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 40px auto;
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      margin-top: 0;
+    }
+
+    input {
+      width: 70%;
+      padding: 10px;
+      font-size: 16px;
+      margin-right: 10px;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #007BFF;
+      color: white;
+      border: none;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+
+    #result {
+      margin-top: 30px;
+      padding: 15px;
+      background: #f0f0f0;
+      border-radius: 5px;
+      white-space: pre-wrap;
+    }
+
+    .intro {
+      margin-bottom: 30px;
+      padding: 15px;
+      background: #eef6ff;
+      border-left: 5px solid #007BFF;
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h1>CodeMap</h1>
+</header>
+
+<div class="container">
+
+  <!-- Intro Screen -->
+  <div class="intro">
+    <h2>What is CodeMap?</h2>
+    <p>
+      CodeMap helps developers quickly understand unfamiliar codebases by generating a visual representation of the system architecture.
+    </p>
+
+    <h3>How to use:</h3>
+    <p>
+      Enter a GitHub repository URL and click "Generate" to see the architecture.
+    </p>
+  </div>
+
+  <!-- Input -->
+  <input type="text" id="repoInput" placeholder="Enter GitHub repo URL...">
+  <button onclick="generate()">Generate</button>
+
+  <!-- Output -->
+  <div id="result">
+    Your architecture result will appear here...
+  </div>
+
+</div>
+
+<script>
+  async function generate() {
+    const repo = document.getElementById("repoInput").value;
+    const resultDiv = document.getElementById("result");
+
+    if (!repo) {
+      resultDiv.innerText = "Please enter a repository URL.";
+      return;
+    }
+
+    resultDiv.innerText = "Generating architecture...";
+
+    try {
+      const fakeResponse = `
+Main Modules:
+- /src/components
+- /src/utils
+- app.js
+
+Relationships:
+- app.js uses components
+- components use utils
+
+Architecture:
+Client → App → Components → Utils
+      `;
+      setTimeout(() => {
+        resultDiv.innerText = fakeResponse;
+      }, 1000);
+
+    } catch (error) {
+      resultDiv.innerText = "Error generating architecture.";
+    }
+  }
+</script>
+
+</body>
+</html>
