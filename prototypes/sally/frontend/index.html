@@ -1,912 +1,121 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GitMap — Visualize Any Codebase</title>
-
-  <!-- Cytoscape.js + dagre layout -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
-
-  <!-- Mermaid.js -->
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <meta charset="UTF-8">
+  <title>CodeMap - Explain Mode</title>
 
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:        #0d1117;
-      --surface:   #161b22;
-      --surface2:  #1e2633;
-      --border:    #30363d;
-      --accent:    #58a6ff;
-      --accent2:   #3fb950;
-      --warn:      #f78166;
-      --text:      #e6edf3;
-      --muted:     #8b949e;
-      --radius:    10px;
-    }
-
-    html, body { height: 100%; }
-
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      display: flex;
-      flex-direction: column;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: #f5f5f5;
     }
 
-    /* ── Landing ─────────────────────────────────────────────── */
-    #landing {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      padding: 2rem 1.5rem;
+    header {
+      background: #222;
+      color: white;
+      padding: 20px;
       text-align: center;
-      background: radial-gradient(ellipse 80% 60% at 50% -10%, #1a2a4a 0%, var(--bg) 70%);
     }
 
-    .logo {
-      font-size: 3.2rem;
-      font-weight: 800;
-      letter-spacing: -1px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 0.4rem;
+    .container {
+      max-width: 800px;
+      margin: 40px auto;
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
     }
 
-    .tagline {
-      font-size: 1.2rem;
-      color: var(--muted);
-      margin-bottom: 2.5rem;
-      max-width: 480px;
+    input {
+      width: 70%;
+      padding: 10px;
+      font-size: 16px;
+      margin-right: 10px;
     }
 
-    .how-cards {
-      display: flex;
-      gap: 1rem;
-      margin-bottom: 2.5rem;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-
-    .how-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1rem 1.2rem;
-      width: 160px;
-      text-align: left;
-    }
-
-    .how-card .step-num {
-      font-size: 0.7rem;
-      font-weight: 700;
-      color: var(--accent);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 0.4rem;
-    }
-
-    .how-card .step-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.3rem; }
-    .how-card .step-desc  { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
-
-    .input-row {
-      display: flex;
-      gap: 0.5rem;
-      width: 100%;
-      max-width: 600px;
-      margin-bottom: 1rem;
-    }
-
-    #urlInput {
-      flex: 1;
-      padding: 0.75rem 1rem;
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--text);
-      font-size: 0.95rem;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    #urlInput:focus { border-color: var(--accent); }
-    #urlInput::placeholder { color: var(--muted); }
-
-    .btn {
-      padding: 0.75rem 1.4rem;
-      border-radius: var(--radius);
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #007BFF;
+      color: white;
       border: none;
-      font-size: 0.95rem;
-      font-weight: 600;
       cursor: pointer;
-      transition: opacity 0.15s, transform 0.1s;
-    }
-    .btn:active { transform: scale(0.97); }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    .btn-primary { background: var(--accent); color: #0d1117; }
-    .btn-primary:hover:not(:disabled) { opacity: 0.85; }
-
-    .btn-sm { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
-
-    .btn-ghost {
-      background: transparent;
-      color: var(--muted);
-      border: 1px solid var(--border);
-    }
-    .btn-ghost:hover { color: var(--text); border-color: var(--accent); }
-
-    #errorMsg { color: var(--warn); font-size: 0.85rem; min-height: 1.2em; margin-bottom: 0.5rem; }
-
-    #recentSection { width: 100%; max-width: 600px; margin-top: 1.5rem; }
-
-    #recentSection h3 {
-      font-size: 0.8rem;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 0.7rem;
-      text-align: left;
+      border-radius: 5px;
     }
 
-    .recent-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-
-    .recent-chip {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 0.35rem 0.8rem;
-      font-size: 0.78rem;
-      cursor: pointer;
-      color: var(--text);
-      transition: border-color 0.15s, background 0.15s;
-    }
-    .recent-chip:hover { border-color: var(--accent); background: var(--surface2); }
-
-    /* ── Loading ─────────────────────────────────────────────── */
-    #loadingOverlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(13,17,23,0.85);
-      backdrop-filter: blur(4px);
-      z-index: 100;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 1rem;
-    }
-    #loadingOverlay.visible { display: flex; }
-
-    .spinner {
-      width: 44px; height: 44px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #loadingMsg { color: var(--muted); font-size: 0.9rem; }
-
-    /* ── App view ────────────────────────────────────────────── */
-    #appView {
-      display: none;
-      flex: 1;
-      flex-direction: row;
-      height: 100vh;
-      overflow: hidden;
-    }
-    #appView.visible { display: flex; }
-
-    /* Sidebar */
-    #sidebar {
-      width: 300px;
-      min-width: 260px;
-      background: var(--surface);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
+    #result {
+      margin-top: 30px;
+      padding: 20px;
+      background: #f0f0f0;
+      border-radius: 5px;
+      white-space: pre-wrap;
     }
 
-    .sidebar-header {
-      padding: 1rem 1.2rem 0.7rem;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-    }
-
-    .sidebar-logo {
-      font-size: 1.2rem;
-      font-weight: 800;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .sidebar-repo {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin-left: auto;
-      max-width: 120px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    #sidebarContent {
-      flex: 1;
-      overflow-y: auto;
-      padding: 1rem 1.2rem;
-    }
-    #sidebarContent::-webkit-scrollbar { width: 4px; }
-    #sidebarContent::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-    .section-label {
-      font-size: 0.7rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--muted);
-      margin-bottom: 0.5rem;
-      margin-top: 1.2rem;
-    }
-    .section-label:first-child { margin-top: 0; }
-
-    #summaryText { font-size: 0.85rem; line-height: 1.6; color: var(--text); }
-
-    .tech-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-    .tech-chip {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 0.2rem 0.6rem;
-      font-size: 0.75rem;
-      color: var(--muted);
-    }
-
-    #nodeDetail {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 0.8rem 1rem;
-      margin-top: 0.5rem;
-      display: none;
-    }
-    #nodeDetail.visible { display: block; }
-    #nodeDetail .node-label { font-size: 1rem; font-weight: 700; margin-bottom: 0.2rem; }
-    #nodeDetail .node-type-badge {
-      display: inline-block;
-      font-size: 0.68rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      border-radius: 4px;
-      padding: 0.15rem 0.5rem;
-      margin-bottom: 0.6rem;
-    }
-    #nodeDetail .node-desc { font-size: 0.82rem; color: var(--muted); line-height: 1.5; margin-bottom: 0.7rem; }
-    #nodeDetail .node-files {
-      font-size: 0.75rem;
-      font-family: "SF Mono", "Fira Code", monospace;
-      color: var(--muted);
-      display: flex;
-      flex-direction: column;
-      gap: 0.2rem;
-    }
-
-    .sidebar-actions {
-      padding: 0.8rem 1.2rem;
-      border-top: 1px solid var(--border);
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    /* Graph container */
-    #graphContainer {
-      flex: 1;
-      position: relative;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* ── View toggle bar ─────────────────────────────────────── */
-    #viewToggle {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.6rem 1rem;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface);
-      flex-shrink: 0;
-    }
-
-    #viewToggle span {
-      font-size: 0.75rem;
-      color: var(--muted);
-      margin-right: 0.2rem;
-    }
-
-    .view-tab {
-      padding: 0.3rem 0.9rem;
-      border-radius: 20px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--muted);
-      font-size: 0.8rem;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .view-tab:hover { color: var(--text); border-color: var(--accent); }
-    .view-tab.active {
-      background: var(--accent);
-      color: #0d1117;
-      border-color: var(--accent);
-      font-weight: 700;
-    }
-
-    #cacheBadge {
-      margin-left: auto;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 0.2rem 0.6rem;
-      font-size: 0.72rem;
-      color: var(--muted);
-      display: none;
-    }
-    #cacheBadge.visible { display: block; }
-
-    /* ── Cytoscape panel ─────────────────────────────────────── */
-    #cyPanel {
-      flex: 1;
-      position: relative;
-      overflow: hidden;
-    }
-
-    #cy { width: 100%; height: 100%; }
-
-    #legend {
-      position: absolute;
-      bottom: 12px;
-      left: 12px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 0.6rem 0.8rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.35rem;
-      pointer-events: none;
-    }
-    .legend-item { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; color: var(--muted); }
-    .legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
-
-    #hint {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 0.3rem 0.9rem;
-      font-size: 0.72rem;
-      color: var(--muted);
-      pointer-events: none;
-      transition: opacity 0.5s;
-      white-space: nowrap;
-    }
-
-    /* ── Mermaid panel ───────────────────────────────────────── */
-    #mermaidPanel {
-      flex: 1;
-      overflow: auto;
-      display: none;
-      align-items: flex-start;
-      justify-content: center;
-      padding: 2rem;
-      background: var(--bg);
-    }
-    #mermaidPanel.active { display: flex; }
-
-    #mermaidPanel .mermaid {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 2rem;
-      max-width: 100%;
-    }
-
-    /* Override Mermaid's default white background */
-    #mermaidPanel svg { max-width: 100%; height: auto; }
-
-    @media (max-width: 640px) {
-      #sidebar { width: 100%; min-width: 0; height: 40vh; border-right: none; border-bottom: 1px solid var(--border); }
-      #appView.visible { flex-direction: column; }
-      #graphContainer { height: 60vh; }
+    .intro {
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #eef6ff;
+      border-left: 5px solid #007BFF;
     }
   </style>
 </head>
+
 <body>
 
-<!-- ══════════════════════════ LANDING ══════════════════════════ -->
-<section id="landing">
-  <div class="logo">GitMap</div>
-  <p class="tagline">Paste a GitHub repo URL and get an interactive visual map of its architecture in seconds.</p>
+<header>
+  <h1>CodeMap (Explain Mode)</h1>
+</header>
 
-  <div class="how-cards">
-    <div class="how-card">
-      <div class="step-num">Step 1</div>
-      <div class="step-title">Paste a GitHub URL</div>
-      <div class="step-desc">Any public repo — open source, class project, side project.</div>
-    </div>
-    <div class="how-card">
-      <div class="step-num">Step 2</div>
-      <div class="step-title">AI reads the code</div>
-      <div class="step-desc">GPT-4o scans key files and identifies modules, services, and dependencies.</div>
-    </div>
-    <div class="how-card">
-      <div class="step-num">Step 3</div>
-      <div class="step-title">Explore the graph</div>
-      <div class="step-desc">Switch between an interactive graph and a clean flowchart view.</div>
-    </div>
+<div class="container">
+
+  <div class="intro">
+    <h2>What is CodeMap?</h2>
+    <p>
+      CodeMap helps developers understand unfamiliar codebases by generating a structured explanation of the system architecture.
+    </p>
+    <p>
+      Enter a GitHub repo URL → get a clear breakdown of modules, relationships, and where to start.
+    </p>
   </div>
 
-  <div class="input-row">
-    <input id="urlInput" type="url" placeholder="https://github.com/owner/repo" autocomplete="off" spellcheck="false" />
-    <button class="btn btn-primary" id="analyzeBtn" onclick="startAnalysis()">Analyze</button>
+  <input type="text" id="repoInput" placeholder="Enter GitHub repo URL...">
+  <button onclick="generate()">Analyze</button>
+
+  <div id="result">
+Your explanation will appear here...
   </div>
 
-  <div id="errorMsg"></div>
-
-  <div id="recentSection">
-    <h3>Recently analyzed</h3>
-    <div class="recent-chips" id="recentChips">
-      <span style="font-size:0.8rem;color:var(--muted)">None yet — be the first!</span>
-    </div>
-  </div>
-</section>
-
-<!-- ══════════════════════════ LOADING ══════════════════════════ -->
-<div id="loadingOverlay">
-  <div class="spinner"></div>
-  <div id="loadingMsg">Fetching repository…</div>
-</div>
-
-<!-- ══════════════════════════ APP VIEW ════════════════════════ -->
-<div id="appView">
-
-  <!-- Sidebar -->
-  <aside id="sidebar">
-    <div class="sidebar-header">
-      <span class="sidebar-logo">GitMap</span>
-      <span class="sidebar-repo" id="sidebarRepo"></span>
-    </div>
-
-    <div id="sidebarContent">
-      <div class="section-label">Overview</div>
-      <p id="summaryText"></p>
-
-      <div class="section-label">Tech Stack</div>
-      <div class="tech-chips" id="techChips"></div>
-
-      <div class="section-label">Component</div>
-      <div id="nodeDetail">
-        <div class="node-label" id="nodeLabel"></div>
-        <span class="node-type-badge" id="nodeTypeBadge"></span>
-        <p class="node-desc" id="nodeDesc"></p>
-        <div class="node-files" id="nodeFiles"></div>
-      </div>
-      <p id="nodeHint" style="font-size:0.8rem;color:var(--muted)">Click a node to see details.</p>
-    </div>
-
-    <div class="sidebar-actions">
-      <button class="btn btn-ghost btn-sm" onclick="backToLanding()">← New Search</button>
-      <button class="btn btn-ghost btn-sm" id="refreshBtn">↻ Re-analyze</button>
-    </div>
-  </aside>
-
-  <!-- Main graph area -->
-  <div id="graphContainer">
-
-    <!-- View toggle bar -->
-    <div id="viewToggle">
-      <span>View:</span>
-      <button class="view-tab active" id="tabInteractive" onclick="switchView('interactive')">⬡ Interactive</button>
-      <button class="view-tab"        id="tabFlowchart"   onclick="switchView('flowchart')">⬒ Flowchart</button>
-      <div id="cacheBadge">⚡ Cached</div>
-    </div>
-
-    <!-- Cytoscape panel -->
-    <div id="cyPanel">
-      <div id="cy"></div>
-      <div id="legend">
-        <div class="legend-item"><div class="legend-dot" style="background:#58a6ff"></div>Entrypoint</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#3fb950"></div>Module</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#d2a8ff"></div>Service</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#e3b341"></div>Config</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#f78166"></div>External</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#79c0ff"></div>Database</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#56d364"></div>Test</div>
-      </div>
-      <div id="hint">Click any node · Scroll to zoom · Drag to pan</div>
-    </div>
-
-    <!-- Mermaid panel -->
-    <div id="mermaidPanel">
-      <div class="mermaid" id="mermaidDiagram"></div>
-    </div>
-
-  </div>
 </div>
 
 <script>
-  cytoscape.use(cytoscapeDagre);
+async function generate() {
+  const repo = document.getElementById("repoInput").value;
+  const resultDiv = document.getElementById("result");
 
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: 'dark',
-    themeVariables: {
-      background:      '#161b22',
-      mainBkg:         '#1e2633',
-      nodeBorder:      '#30363d',
-      lineColor:       '#58a6ff',
-      primaryTextColor:'#e6edf3',
-      edgeLabelBackground: '#0d1117',
-      fontSize:        '14px',
-    },
-    flowchart: { curve: 'basis', padding: 20 },
-  });
-
-  const API = 'http://localhost:8000';
-  let currentUrl  = '';
-  let currentData = null;
-  let cy          = null;
-  let activeView  = 'interactive';
-
-  const TYPE_COLORS = {
-    entrypoint: '#58a6ff',
-    module:     '#3fb950',
-    service:    '#d2a8ff',
-    config:     '#e3b341',
-    external:   '#f78166',
-    database:   '#79c0ff',
-    test:       '#56d364',
-  };
-  function typeColor(t) { return TYPE_COLORS[t?.toLowerCase()] || '#8b949e'; }
-
-  // ── View switcher ───────────────────────────────────────────
-  function switchView(mode) {
-    activeView = mode;
-    document.getElementById('tabInteractive').classList.toggle('active', mode === 'interactive');
-    document.getElementById('tabFlowchart').classList.toggle('active',   mode === 'flowchart');
-    document.getElementById('cyPanel').style.display       = mode === 'interactive' ? '' : 'none';
-    document.getElementById('mermaidPanel').classList.toggle('active', mode === 'flowchart');
-
-    // Node detail panel only makes sense in interactive mode
-    document.getElementById('nodeDetail').classList.remove('visible');
-    document.getElementById('nodeHint').style.display = mode === 'interactive' ? '' : 'none';
-
-    if (mode === 'flowchart' && currentData) renderMermaid(currentData);
+  if (!repo) {
+    resultDiv.innerText = "Please enter a repository URL.";
+    return;
   }
 
-  // ── Mermaid renderer ────────────────────────────────────────
-  async function renderMermaid(data) {
-    const el = document.getElementById('mermaidDiagram');
-    el.removeAttribute('data-processed');
-    el.innerHTML = '';
+  resultDiv.innerText = "Analyzing repository...";
 
-    // Build mermaid definition
-    const lines = ['flowchart TD'];
-
-    // Class definitions for node types
-    lines.push('  classDef entrypoint fill:#1c3a5e,stroke:#58a6ff,color:#58a6ff,stroke-width:2px');
-    lines.push('  classDef module     fill:#1a3d2b,stroke:#3fb950,color:#3fb950,stroke-width:2px');
-    lines.push('  classDef service    fill:#2d1f47,stroke:#d2a8ff,color:#d2a8ff,stroke-width:2px');
-    lines.push('  classDef config     fill:#3d2e0a,stroke:#e3b341,color:#e3b341,stroke-width:2px');
-    lines.push('  classDef external   fill:#3d1a14,stroke:#f78166,color:#f78166,stroke-width:2px');
-    lines.push('  classDef database   fill:#1a2f47,stroke:#79c0ff,color:#79c0ff,stroke-width:2px');
-    lines.push('  classDef test       fill:#1a3d23,stroke:#56d364,color:#56d364,stroke-width:2px');
-    lines.push('  classDef default    fill:#1e2633,stroke:#30363d,color:#e6edf3,stroke-width:1px');
-
-    // Node definitions — sanitize labels for mermaid
-    (data.nodes || []).forEach(n => {
-      const safeId    = n.id.replace(/[^a-zA-Z0-9_]/g, '_');
-      const safeLabel = (n.label || n.id).replace(/"/g, "'");
-      const type      = (n.type || 'module').toLowerCase();
-      lines.push(`  ${safeId}["${safeLabel}"]:::${type}`);
-    });
-
-    // Edges
-    (data.edges || []).forEach(e => {
-      const src   = e.source.replace(/[^a-zA-Z0-9_]/g, '_');
-      const tgt   = e.target.replace(/[^a-zA-Z0-9_]/g, '_');
-      const label = e.label ? `|"${e.label.replace(/"/g, "'")}"| ` : '';
-      lines.push(`  ${src} -->${label}${tgt}`);
-    });
-
-    const definition = lines.join('\n');
-
-    try {
-      const { svg } = await mermaid.render('mermaid-svg-' + Date.now(), definition);
-      el.innerHTML = svg;
-    } catch (err) {
-      el.innerHTML = `<pre style="color:var(--warn);font-size:0.8rem">${err.message}</pre>`;
-    }
-  }
-
-  // ── Cytoscape renderer ──────────────────────────────────────
-  function renderCytoscape(data) {
-    const elements = [];
-
-    (data.nodes || []).forEach(n => {
-      elements.push({ data: {
-        id:          n.id,
-        label:       n.label,
-        type:        n.type,
-        description: n.description,
-        files:       n.files || [],
-        color:       typeColor(n.type),
-      }});
-    });
-
-    (data.edges || []).forEach((e, i) => {
-      elements.push({ data: {
-        id:     `e${i}`,
-        source: e.source,
-        target: e.target,
-        label:  e.label || '',
-      }});
-    });
-
-    if (cy) cy.destroy();
-
-    cy = cytoscape({
-      container: document.getElementById('cy'),
-      elements,
-      style: [
-        {
-          selector: 'node',
-          style: {
-            'background-color':   'data(color)',
-            'label':              'data(label)',
-            'color':              '#e6edf3',
-            'font-size':          '12px',
-            'font-weight':        '600',
-            'text-valign':        'center',
-            'text-halign':        'center',
-            'text-wrap':          'wrap',
-            'text-max-width':     '100px',
-            'text-outline-color': 'data(color)',
-            'text-outline-width': '1px',
-            'shape':              'round-rectangle',
-            'width':              'label',
-            'height':             'label',
-            'padding':            '12px',
-            'border-width':       '2px',
-            'border-color':       '#30363d',
-            'transition-property':'border-color, opacity',
-            'transition-duration':'0.15s',
-          }
-        },
-        { selector: 'node:selected',   style: { 'border-color': '#fff', 'border-width': '2.5px' } },
-        { selector: 'node.highlighted', style: { 'border-color': '#fff', 'border-width': '2.5px' } },
-        { selector: 'node.dimmed',      style: { 'opacity': '0.25' } },
-        {
-          selector: 'edge',
-          style: {
-            'width':                   2,
-            'line-color':              '#444d58',
-            'target-arrow-color':      '#444d58',
-            'target-arrow-shape':      'triangle',
-            'curve-style':             'bezier',
-            'label':                   'data(label)',
-            'font-size':               '9px',
-            'color':                   '#8b949e',
-            'text-background-color':   '#0d1117',
-            'text-background-opacity': 1,
-            'text-background-padding': '2px',
-            'edge-text-rotation':      'autorotate',
-            'opacity':                 '0.8',
-          }
-        },
-        {
-          selector: 'edge.highlighted',
-          style: { 'line-color': '#58a6ff', 'target-arrow-color': '#58a6ff', 'opacity': '1', 'width': 2.5 }
-        },
-        { selector: 'edge.dimmed', style: { 'opacity': '0.05' } },
-      ],
-      layout: {
-        name:             'dagre',
-        rankDir:          'TB',
-        rankSep:          90,
-        nodeSep:          60,
-        edgeSep:          10,
-        animate:          true,
-        animationDuration: 500,
-        fit:              true,
-        padding:          60,
+  try {
+    const response = await fetch("http://localhost:8080/analyze", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
       },
-      userZoomingEnabled:  true,
-      userPanningEnabled:  true,
-      boxSelectionEnabled: false,
+      body: JSON.stringify({ repo: repo })
     });
 
-    // Fade hint
-    setTimeout(() => {
-      const h = document.getElementById('hint');
-      if (h) h.style.opacity = '0';
-    }, 4000);
+    const data = await response.json();
+    resultDiv.innerText = data.result;
 
-    cy.on('tap', 'node', function(evt) {
-      const node = evt.target;
-      const d    = node.data();
-
-      cy.elements().removeClass('highlighted dimmed');
-      const nbhd = node.closedNeighborhood();
-      cy.elements().not(nbhd).addClass('dimmed');
-      nbhd.addClass('highlighted');
-
-      document.getElementById('nodeLabel').textContent = d.label;
-      document.getElementById('nodeDesc').textContent  = d.description || '';
-      document.getElementById('nodeFiles').innerHTML   = (d.files || []).map(f => `<span>📄 ${f}</span>`).join('');
-
-      const badge = document.getElementById('nodeTypeBadge');
-      badge.textContent       = d.type || 'module';
-      badge.style.background  = typeColor(d.type) + '22';
-      badge.style.color       = typeColor(d.type);
-      badge.style.border      = `1px solid ${typeColor(d.type)}55`;
-
-      document.getElementById('nodeDetail').classList.add('visible');
-      document.getElementById('nodeHint').style.display = 'none';
-    });
-
-    cy.on('tap', function(evt) {
-      if (evt.target === cy) {
-        cy.elements().removeClass('highlighted dimmed');
-        document.getElementById('nodeDetail').classList.remove('visible');
-        document.getElementById('nodeHint').style.display = '';
-      }
-    });
+  } catch (error) {
+    resultDiv.innerText = "Error connecting to backend.";
   }
-
-  // ── Show app ────────────────────────────────────────────────
-  function showApp(data) {
-    currentData = data;
-    document.getElementById('landing').style.display = 'none';
-    document.getElementById('appView').classList.add('visible');
-
-    document.getElementById('sidebarRepo').textContent  = data.repo || '';
-    document.getElementById('summaryText').textContent  = data.summary || 'No summary available.';
-
-    const techChips = document.getElementById('techChips');
-    techChips.innerHTML = '';
-    (data.tech_stack || []).forEach(t => {
-      const chip = document.createElement('span');
-      chip.className   = 'tech-chip';
-      chip.textContent = t;
-      techChips.appendChild(chip);
-    });
-
-    document.getElementById('cacheBadge').classList.toggle('visible', !!data.cached);
-    document.getElementById('nodeDetail').classList.remove('visible');
-    document.getElementById('nodeHint').style.display = '';
-    document.getElementById('hint').style.opacity = '1';
-
-    // Always start on interactive view
-    switchView('interactive');
-    renderCytoscape(data);
-  }
-
-  // ── API helpers ─────────────────────────────────────────────
-  async function startAnalysis(refresh = false) {
-    const url = document.getElementById('urlInput').value.trim();
-    if (!url) { showError('Please enter a GitHub URL.'); return; }
-
-    currentUrl = url;
-    showError('');
-    document.getElementById('analyzeBtn').disabled = true;
-    setLoading(true, 'Fetching repository…');
-
-    try {
-      const res = await fetch(`${API}/analyze`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ github_url: url, refresh }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || `Server error ${res.status}`);
-      }
-
-      setLoading(true, 'Building graph…');
-      const data = await res.json();
-      setLoading(false);
-      showApp(data);
-      loadRecent();
-    } catch (err) {
-      setLoading(false);
-      showError(err.message || 'Something went wrong. Is the backend running?');
-    } finally {
-      document.getElementById('analyzeBtn').disabled = false;
-    }
-  }
-
-  async function refreshFromApp() {
-    document.getElementById('refreshBtn').disabled = true;
-    setLoading(true, 'Re-analyzing…');
-    try {
-      const res = await fetch(`${API}/analyze`, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ github_url: currentUrl, refresh: true }),
-      });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
-      const data = await res.json();
-      setLoading(false);
-      showApp(data);
-    } catch (err) {
-      setLoading(false);
-      alert(err.message);
-    } finally {
-      document.getElementById('refreshBtn').disabled = false;
-    }
-  }
-
-  document.getElementById('refreshBtn').onclick = refreshFromApp;
-
-  async function loadRecent() {
-    try {
-      const res = await fetch(`${API}/recent`);
-      if (!res.ok) return;
-      const data  = await res.json();
-      const chips = document.getElementById('recentChips');
-      if (!data.analyses?.length) return;
-      chips.innerHTML = '';
-      data.analyses.forEach(a => {
-        const chip       = document.createElement('button');
-        chip.className   = 'recent-chip';
-        chip.textContent = `${a.owner}/${a.repo}`;
-        chip.title       = a.summary || '';
-        chip.onclick     = () => { document.getElementById('urlInput').value = a.github_url; startAnalysis(); };
-        chips.appendChild(chip);
-      });
-    } catch (_) {}
-  }
-
-  function showError(msg) { document.getElementById('errorMsg').textContent = msg; }
-
-  function setLoading(visible, msg = '') {
-    document.getElementById('loadingOverlay').classList.toggle('visible', visible);
-    if (msg) document.getElementById('loadingMsg').textContent = msg;
-  }
-
-  function backToLanding() {
-    document.getElementById('appView').classList.remove('visible');
-    document.getElementById('landing').style.display = '';
-    if (cy) { cy.destroy(); cy = null; }
-    currentData = null;
-  }
-
-  document.getElementById('urlInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') startAnalysis();
-  });
-
-  loadRecent();
+}
 </script>
 
 </body>
