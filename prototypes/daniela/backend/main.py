@@ -1,19 +1,22 @@
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 
-load_dotenv()
+# Always load backend/.env even if uvicorn was started from another directory.
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from github_fetcher import get_repo_data, parse_github_url
-from ai_analyzer import analyze_repo, chat_about_repo
+from ai_analyzer import analyze_repo, chat_about_repo, skip_gemini_enabled
 from database import init_db, get_cached, save_analysis, list_recent, delete_cache
 
 init_db()
 
-app = FastAPI(title="GitMap API — Daniela (GraphQL + Gemini)")
+app = FastAPI(title="GitMap API — Daniela (GraphQL + Gemini / mock)")
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,7 +38,12 @@ class ChatRequest(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "prototype": "daniela", "github": "graphql", "ai": "gemini"}
+    return {
+        "status": "ok",
+        "prototype": "daniela",
+        "github": "graphql",
+        "ai": "mock" if skip_gemini_enabled() else "gemini",
+    }
 
 
 @app.get("/api/recent")

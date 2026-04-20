@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import re
 from typing import Any, Optional
+from urllib.parse import urlparse
 import httpx
 
 GITHUB_GRAPHQL = "https://api.github.com/graphql"
@@ -32,14 +33,40 @@ MAX_FILES_TO_READ = 15
 
 
 def parse_github_url(url: str) -> tuple[str, str]:
-    url = url.strip().rstrip("/")
-    pattern = r"github\.com[/:]([^/]+)/([^/\s\.]+)"
-    match = re.search(pattern, url)
-    if not match:
-        raise ValueError(f"Could not parse GitHub URL: {url}")
-    owner, repo = match.group(1), match.group(2)
-    repo = repo.removesuffix(".git")
-    return owner, repo
+    """
+    Accepts https URLs (with optional /tree/...), git@github.com:owner/repo.git, or owner/repo.
+    Repo names may contain dots (e.g. my.repo).
+    """
+    raw = url.strip().rstrip("/")
+    if not raw:
+        raise ValueError("GitHub URL is empty")
+
+    # git@github.com:owner/repo
+    if raw.startswith("git@"):
+        m = re.match(
+            r"git@github\.com:([^/]+)/([^/\s]+?)(?:\.git)?(?:/|$)",
+            raw,
+            re.IGNORECASE,
+        )
+        if not m:
+            raise ValueError(f"Could not parse Git SSH URL: {url}")
+        return m.group(1), m.group(2)
+
+    if "://" not in raw:
+        raw = "https://" + raw.lstrip("/")
+
+    parsed = urlparse(raw)
+    host = (parsed.netloc or "").lower()
+    if "github.com" not in host:
+        raise ValueError(f"Not a github.com URL: {url}")
+
+    parts = [p for p in parsed.path.strip("/").split("/") if p]
+    if len(parts) < 2:
+        raise ValueError(
+            f"Expected https://github.com/owner/repository — could not parse: {url}"
+        )
+    owner, repo = parts[0], parts[1]
+    return owner, repo.removesuffix(".git")
 
 
 def _headers(token: Optional[str]) -> dict[str, str]:
@@ -58,18 +85,35 @@ async def _graphql(
     variables: dict[str, Any],
     token: Optional[str],
 ) -> dict[str, Any]:
-    r = await client.post(
-        GITHUB_GRAPHQL,
-        json={"query": query, "variables": variables},
-        headers=_headers(token),
-    )
-    r.raise_for_status()
+    try:
+        r = await client.post(
+            GITHUB_GRAPHQL,
+            json={"query": query, "variables": variables},
+            headers=_headers(token),
+        )
+        r.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        status = e.response.status_code
+        if status in (401, 403):
+            raise ValueError(
+                "GitHub API rejected the request (often rate limits without a token). "
+                "Set GITHUB_TOKEN in backend/.env (see .env.example), restart the server, and try again."
+            ) from e
+        raise ValueError(f"GitHub API HTTP error {status}.") from e
     body = r.json()
     if body.get("errors"):
         msgs = "; ".join(e.get("message", "?") for e in body["errors"])
         raise ValueError(f"GitHub GraphQL: {msgs}")
     return body["data"]
 
+
+QUERY_REPO_LOOKUP = """
+query RepoLookup($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    id
+  }
+}
+"""
 
 QUERY_TREE = """
 query TreeEntries($owner: String!, $name: String!, $expression: String!) {
@@ -107,6 +151,25 @@ def _path_expression(dir_path: str) -> str:
     if not dir_path:
         return "HEAD:"
     return f"HEAD:{dir_path}"
+
+
+async def _require_repository(
+    owner: str,
+    repo: str,
+    token: Optional[str],
+    client: httpx.AsyncClient,
+) -> None:
+    data = await _graphql(
+        client,
+        QUERY_REPO_LOOKUP,
+        {"owner": owner, "name": repo},
+        token,
+    )
+    if data.get("repository") is None:
+        raise ValueError(
+            "Repository not found or not accessible. "
+            "Check the URL; for private repositories add GITHUB_TOKEN to .env."
+        )
 
 
 async def _list_all_blob_paths(
@@ -198,6 +261,7 @@ async def get_repo_data(github_url: str, token: Optional[str] = None) -> dict:
     owner, repo = parse_github_url(github_url)
 
     async with httpx.AsyncClient(timeout=45, follow_redirects=True) as client:
+        await _require_repository(owner, repo, token, client)
         blob_paths = await _list_all_blob_paths(owner, repo, token, client)
         tree_items = [{"path": p} for p in blob_paths]
         paths_to_read = select_files_to_read(tree_items)

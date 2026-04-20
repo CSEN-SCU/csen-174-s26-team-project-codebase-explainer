@@ -1,5 +1,6 @@
 """
 Architecture analysis and Q&A using Google Gemini.
+Optional heuristic-only mode when GITMAP_SKIP_GEMINI=1 (no API key / quota needed).
 """
 
 from __future__ import annotations
@@ -10,6 +11,128 @@ import re
 from typing import Any
 
 import google.generativeai as genai
+
+
+def skip_gemini_enabled() -> bool:
+    return os.getenv("GITMAP_SKIP_GEMINI", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _slug_id(name: str, used: set[str]) -> str:
+    base = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_") or "folder"
+    nid = base
+    n = 2
+    while nid in used:
+        nid = f"{base}_{n}"
+        n += 1
+    used.add(nid)
+    return nid
+
+
+def _infer_tech_stack(paths: list[str], file_contents: dict[str, str]) -> list[str]:
+    hints: list[str] = []
+    low = [p.lower() for p in paths]
+
+    def any_path(sub: str) -> bool:
+        return any(sub in p for p in low)
+
+    pkg_blob = ""
+    for rel, text in file_contents.items():
+        if rel.lower().endswith("package.json") and text:
+            pkg_blob = text.lower()
+            break
+
+    if any_path("package.json") or pkg_blob:
+        hints.append("Node.js")
+    if pkg_blob and "next" in pkg_blob:
+        hints.append("Next.js")
+    if pkg_blob and "react" in pkg_blob:
+        hints.append("React")
+    if any_path("tailwind") or "tailwind" in pkg_blob:
+        hints.append("Tailwind CSS")
+    if any_path("vite.config"):
+        hints.append("Vite")
+    if any_path("requirements.txt") or any_path("pyproject.toml"):
+        hints.append("Python")
+    if any_path("go.mod"):
+        hints.append("Go")
+    if any_path("cargo.toml"):
+        hints.append("Rust")
+
+    return hints or ["(add GEMINI_API_KEY for AI-inferred stack)"]
+
+
+def mock_analysis_from_tree(repo_data: dict) -> dict:
+    """Build a small graph from folder structure only — for local testing without Gemini."""
+    owner = repo_data["owner"]
+    repo = repo_data["repo"]
+    paths: list[str] = list(repo_data.get("file_tree") or [])
+    files_read: dict[str, str] = repo_data.get("files") or {}
+    n = len(paths)
+
+    buckets: dict[str, list[str]] = {}
+    root_files: list[str] = []
+    for p in paths:
+        if "/" not in p:
+            root_files.append(p)
+        else:
+            top = p.split("/")[0]
+            buckets.setdefault(top, []).append(p)
+
+    tech_stack = _infer_tech_stack(paths, files_read)
+    top_names = sorted(buckets.keys())
+    max_dirs = 13
+    merged_label = "Other top-level folders"
+    if len(top_names) > max_dirs:
+        keep = top_names[: max_dirs - 1]
+        drop = top_names[max_dirs - 1 :]
+        merged: list[str] = []
+        for d in drop:
+            merged.extend(buckets.pop(d, []))
+        buckets[merged_label] = merged
+        top_names = sorted(buckets.keys())
+
+    nodes: list[dict] = []
+    edges: list[dict] = []
+    used_ids: set[str] = set()
+
+    nodes.append(
+        {
+            "id": "root",
+            "label": f"{repo} (root)",
+            "type": "entrypoint",
+            "description": f"Top-level files in {owner}/{repo} (mock mode — folder layout only).",
+            "files": sorted(root_files)[:30],
+        }
+    )
+    used_ids.add("root")
+
+    for d in top_names:
+        nid = _slug_id(d, used_ids)
+        bucket = buckets.get(d, [])
+        nodes.append(
+            {
+                "id": nid,
+                "label": d,
+                "type": "config" if d in (".github", ".vscode", "ci") else "module",
+                "description": f"{len(bucket)} file(s) under {d}/",
+                "files": sorted(bucket)[:25],
+            }
+        )
+        edges.append({"source": "root", "target": nid, "label": "contains"})
+
+    summary = (
+        f"Heuristic preview only (Gemini off): {owner}/{repo} has {n} tracked file(s) "
+        f"in {len(top_names)} top-level folder group(s). "
+        "Nodes mirror the repo tree, not inferred architecture. "
+        "Unset GITMAP_SKIP_GEMINI and set GEMINI_API_KEY for AI analysis and chat."
+    )
+
+    return {
+        "summary": summary,
+        "tech_stack": tech_stack,
+        "nodes": nodes,
+        "edges": edges,
+    }
 
 SYSTEM_ANALYSIS = """You are an expert software architect. Analyze a GitHub repository from file paths and excerpts.
 Respond with valid JSON only — no markdown fences, no commentary outside the JSON object."""
@@ -114,6 +237,9 @@ def _parse_json_object(text: str) -> dict:
 
 
 async def analyze_repo(repo_data: dict) -> dict:
+    if skip_gemini_enabled():
+        return mock_analysis_from_tree(repo_data)
+
     prompt = build_analysis_prompt(repo_data)
     model = _model_json()
     try:
@@ -141,6 +267,13 @@ async def chat_about_repo(
     nodes: list[dict],
     edges: list[dict],
 ) -> str:
+    if skip_gemini_enabled():
+        return (
+            "Chat uses Gemini, which is turned off (`GITMAP_SKIP_GEMINI=1`). "
+            "Remove that line from `.env` and set `GEMINI_API_KEY` to get answers here. "
+            "The graph is still a real folder-structure preview from GitHub."
+        )
+
     context = {
         "summary": summary,
         "tech_stack": tech_stack,
