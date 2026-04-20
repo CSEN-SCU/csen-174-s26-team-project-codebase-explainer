@@ -1,7 +1,18 @@
 import { useRef, useState } from "react";
 import { sendChat } from "../api.js";
 
-export default function ChatPanel({ githubUrl }) {
+const DEFAULT_PROMPTS = [
+  "What are the main modules in this repo?",
+  "What depends on authentication?",
+  "Where is the entry point?",
+  "Explain this repo in 5 bullet points.",
+];
+
+export default function ChatPanel({
+  githubUrl,
+  title = "Ask the map",
+  starterPrompts = DEFAULT_PROMPTS,
+}) {
   const [messages, setMessages] = useState(() => [
     {
       role: "assistant",
@@ -13,8 +24,8 @@ export default function ChatPanel({ githubUrl }) {
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
 
-  async function send() {
-    const text = input.trim();
+  async function send(explicitText) {
+    const text = (explicitText ?? input).trim();
     if (!text || sending) return;
     setInput("");
     setMessages((m) => [...m, { role: "user", text }]);
@@ -56,8 +67,41 @@ export default function ChatPanel({ githubUrl }) {
           background: "linear-gradient(90deg, var(--pine-muted), transparent)",
         }}
       >
-        Ask the map
+        {title}
       </div>
+      {!!starterPrompts?.length && (
+        <div
+          style={{
+            padding: "0.5rem 0.65rem",
+            borderBottom: "1px solid var(--ridge)",
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.35rem",
+            background: "rgba(255,255,255,0.5)",
+          }}
+        >
+          {starterPrompts.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              disabled={sending}
+              onClick={() => send(prompt)}
+              style={{
+                fontFamily: "var(--font-body)",
+                fontSize: "0.75rem",
+                padding: "0.28rem 0.5rem",
+                borderRadius: "999px",
+                border: "1px solid var(--ridge)",
+                background: "#fff",
+                color: "var(--ink-soft)",
+                cursor: sending ? "wait" : "pointer",
+              }}
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+      )}
       <div
         style={{
           flex: 1,
