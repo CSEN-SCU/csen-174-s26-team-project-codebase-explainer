@@ -18,9 +18,16 @@ function typeColor(t) {
   return TYPE_COLORS[String(t || "").toLowerCase()] || "#57534e";
 }
 
-export default function ArchitectureGraph({ nodes, edges, onSelectNode }) {
+export default function ArchitectureGraph({
+  nodes,
+  edges,
+  onSelectNode,
+  allowPanZoom = true,
+  minHeight = 220,
+}) {
   const hostRef = useRef(null);
   const cyRef = useRef(null);
+  const roRef = useRef(null);
 
   useEffect(() => {
     const el = hostRef.current;
@@ -130,8 +137,8 @@ export default function ArchitectureGraph({ nodes, edges, onSelectNode }) {
         fit: true,
         padding: 52,
       },
-      userZoomingEnabled: true,
-      userPanningEnabled: true,
+      userZoomingEnabled: allowPanZoom,
+      userPanningEnabled: allowPanZoom,
       boxSelectionEnabled: false,
     });
 
@@ -154,11 +161,25 @@ export default function ArchitectureGraph({ nodes, edges, onSelectNode }) {
 
     cyRef.current = cy;
 
+    // Cytoscape does not always react to container size changes.
+    // Observe host resize and force a recalculation.
+    if (typeof ResizeObserver !== "undefined") {
+      roRef.current?.disconnect();
+      roRef.current = new ResizeObserver(() => {
+        if (!cyRef.current) return;
+        cyRef.current.resize();
+        cyRef.current.fit(undefined, 28);
+      });
+      roRef.current.observe(el);
+    }
+
     return () => {
+      roRef.current?.disconnect();
+      roRef.current = null;
       cy.destroy();
       cyRef.current = null;
     };
-  }, [nodes, edges, onSelectNode]);
+  }, [nodes, edges, onSelectNode, allowPanZoom]);
 
   if (!nodes?.length) {
     return (
@@ -183,7 +204,7 @@ export default function ArchitectureGraph({ nodes, edges, onSelectNode }) {
         position: "relative",
         width: "100%",
         height: "100%",
-        minHeight: "280px",
+        minHeight: `${minHeight}px`,
         background: "linear-gradient(165deg, #faf7f0, #f0ebe3)",
         borderRadius: "12px",
         border: "1px solid var(--ridge)",
@@ -192,7 +213,7 @@ export default function ArchitectureGraph({ nodes, edges, onSelectNode }) {
     >
       <div
         ref={hostRef}
-        style={{ width: "100%", height: "100%", minHeight: "320px" }}
+        style={{ width: "100%", height: "100%" }}
       />
       <div
         style={{
@@ -209,7 +230,7 @@ export default function ArchitectureGraph({ nodes, edges, onSelectNode }) {
           maxWidth: "min(90%, 220px)",
         }}
       >
-        Scroll to zoom · drag to pan · click a node
+        {allowPanZoom ? "Scroll to zoom · drag to pan · click a node" : "Fixed quiz map · click nodes to inspect"}
       </div>
     </div>
   );
