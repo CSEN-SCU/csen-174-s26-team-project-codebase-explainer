@@ -567,7 +567,7 @@ export default function Workspace({
                 "What are the main modules in this repo?",
                 "What depends on authentication?",
                 "Where is the entry point?",
-                "Explain this repo in 5 bullet points.",
+                "Explain this repo in five short numbered points (1–5).",
               ]}
             />
           </section>

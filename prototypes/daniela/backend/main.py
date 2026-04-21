@@ -10,8 +10,14 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from github_fetcher import get_repo_data, parse_github_url
-from ai_analyzer import analyze_repo, chat_about_repo, skip_gemini_enabled
+from github_fetcher import fetch_extra_repo_files, get_repo_data, parse_github_url
+from ai_analyzer import (
+    analysis_is_heuristic_preview,
+    analyze_repo,
+    build_chat_code_context,
+    chat_about_repo,
+    skip_gemini_enabled,
+)
 from database import init_db, get_cached, save_analysis, list_recent, delete_cache
 
 init_db()
@@ -61,7 +67,14 @@ async def analyze(request: AnalyzeRequest):
     if not request.refresh:
         cached = get_cached(owner, repo_name)
         if cached:
-            return {"repo": f"{owner}/{repo_name}", **cached}
+            # Do not reuse tree-only / mock cache once Gemini is enabled (avoids stale "preview" text).
+            cached_heuristic = cached.get("source") == "mock" or (
+                cached.get("source") is None and analysis_is_heuristic_preview(cached)
+            )
+            if not (not skip_gemini_enabled() and cached_heuristic):
+                safe = dict(cached)
+                safe.pop("code_context", None)
+                return {"repo": f"{owner}/{repo_name}", **safe}
 
     github_token = os.getenv("GITHUB_TOKEN")
 
@@ -79,11 +92,34 @@ async def analyze(request: AnalyzeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
 
-    save_analysis(owner, repo_name, request.github_url, graph)
+    analysis_source = "mock" if skip_gemini_enabled() else "gemini"
+    merged_files = dict(repo_data["files"])
+    try:
+        extra_files = await fetch_extra_repo_files(
+            owner,
+            repo_name,
+            github_token,
+            repo_data["file_tree"],
+            set(merged_files.keys()),
+            max_additional=24,
+        )
+        merged_files.update(extra_files)
+    except Exception:
+        pass
+    code_context = build_chat_code_context(repo_data["file_tree"], merged_files)
+    save_analysis(
+        owner,
+        repo_name,
+        request.github_url,
+        graph,
+        source=analysis_source,
+        code_context=code_context,
+    )
 
     return {
         "repo": f"{owner}/{repo_name}",
         "cached": False,
+        "source": analysis_source,
         **graph,
     }
 
@@ -106,6 +142,24 @@ async def chat(request: ChatRequest):
             detail="Analyze this repository first so we have architecture context to answer.",
         )
 
+    code_ctx = cached.get("code_context")
+    if not code_ctx or not code_ctx.get("code_excerpts"):
+        try:
+            rd = await get_repo_data(request.github_url, token=os.getenv("GITHUB_TOKEN"))
+            merged = dict(rd["files"])
+            extra = await fetch_extra_repo_files(
+                owner,
+                repo_name,
+                os.getenv("GITHUB_TOKEN"),
+                rd["file_tree"],
+                set(merged.keys()),
+                max_additional=24,
+            )
+            merged.update(extra)
+            code_ctx = build_chat_code_context(rd["file_tree"], merged)
+        except Exception:
+            code_ctx = None
+
     try:
         answer = await chat_about_repo(
             msg,
@@ -113,6 +167,7 @@ async def chat(request: ChatRequest):
             cached.get("tech_stack") or [],
             cached.get("nodes") or [],
             cached.get("edges") or [],
+            code_context=code_ctx,
         )
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
