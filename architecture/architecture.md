@@ -57,33 +57,26 @@ Data flows in one direction: user → frontend → backend → (cache hit? retur
 
 ```mermaid
 C4Container
-  title Container Diagram — GitMap
+  title "Container Diagram — GitMap"
 
-  Person(user, "Developer / Student", "Opens GitMap in a browser")
+  Person(user, "Developer / Student", "Inputs GitHub URL, explores graph, asks questions")
 
   System_Boundary(gitmap, "GitMap") {
-
-    Container(frontend, "Frontend", "HTML · Cytoscape.js · Mermaid.js", "Single-page app served as a static file. Shows a landing form, interactive expandable graph, flowchart view, step-by-step walkthrough view, and chat panel")
-
-    Container(api, "FastAPI Backend", "Python · FastAPI · uvicorn", "REST API: POST /analyze, GET /recent, DELETE /cache, POST /chat. Orchestrates fetching, analysis, caching, and Q&A")
-
-    Container(fetcher, "GitHub Fetcher", "Python · httpx", "Fetches the full recursive file tree and raw content of up to 25 priority files — README, entry points, config files — sorted by relevance")
-
-    Container(analyzer, "AI Analyzer", "Python · OpenAI SDK", "Converts flat file list into a tree-command-style string, sends it to GPT-4o with file snippets, builds graph nodes and edges strictly from real file paths (AI cannot invent structure)")
-
-    ContainerDb(db, "SQLite Cache", "SQLite", "Stores completed analyses keyed by owner/repo. Cache hit returns instantly with no external API calls")
+    Container(frontend, "Frontend (SPA)", "HTML · JavaScript · Cytoscape.js · Mermaid.js", "Interactive UI with graph, flow view, walkthrough, and chat panel")
+    Container(api, "Backend API", "Python · FastAPI · uvicorn", "Handles POST /analyze, GET /recent, POST /chat. Coordinates fetching, AI analysis, and caching")
+    Container(pipeline, "Analysis Pipeline", "Python modules (github_fetcher + ai_analyzer)", "Fetches prioritized repository files and performs AI-based analysis with structured JSON output. Trade-off: balances accuracy vs token cost")
+    ContainerDb(db, "SQLite Cache", "SQLite", "Stores analyzed repositories keyed by repo. Trade-off: simple and fast but not horizontally scalable")
   }
 
-  System_Ext(github_api, "GitHub REST API", "Returns recursive blob tree and raw file content for any public repository")
-  System_Ext(openai_api, "OpenAI API (GPT-4o)", "Returns JSON: repo summary, tech stack list, per-module descriptions, and dependency edges")
+  System_Ext(github_api, "GitHub REST API", "Provides repository tree and file contents")
+  System_Ext(openai_api, "OpenAI API (GPT-4o)", "Returns summaries, module descriptions, and dependency relationships")
 
-  Rel(user, frontend, "Pastes GitHub URL, clicks Analyze, explores and queries the graph", "Browser")
-  Rel(frontend, api, "POST /analyze · GET /recent · POST /chat", "HTTP / JSON")
-  Rel(api, db, "Check cache on every request / write new result after analysis", "SQL")
-  Rel(api, fetcher, "Calls get_repo_data(url) on cache miss", "In-process Python call")
-  Rel(api, analyzer, "Calls analyze_repo(repo_data) after fetch completes", "In-process Python call")
-  Rel(fetcher, github_api, "GET /repos/:owner/:repo/git/trees?recursive=1 and GET /contents/:path", "HTTPS")
-  Rel(analyzer, openai_api, "chat.completions.create — GPT-4o — json_object response format", "HTTPS")
+  Rel(user, frontend, "Uses")
+  Rel(frontend, api, "HTTP / JSON", "POST /analyze · POST /chat")
+  Rel(api, db, "Read/Write cache")
+  Rel(api, pipeline, "Run analysis on cache miss")
+  Rel(pipeline, github_api, "Fetch repository data")
+  Rel(pipeline, openai_api, "Analyze code (LLM)")
 ```
 
 ---
