@@ -21,8 +21,8 @@ PRIORITY_FILES = {
     "manage.py", "server.js", "server.ts",
 }
 
-MAX_FILE_SIZE = 8_000    # chars per file — keeps total prompt under context limit
-MAX_FILES_TO_READ = 15   # cap on how many files we send to the AI
+MAX_FILE_SIZE = 6_000    # chars per file
+MAX_FILES_TO_READ = 25   # need more files now: README + source files for import analysis
 
 
 def parse_github_url(url: str) -> tuple[str, str]:

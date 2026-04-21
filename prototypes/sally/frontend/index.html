@@ -433,6 +433,61 @@
     /* Override Mermaid's default white background */
     #mermaidPanel svg { max-width: 100%; height: auto; }
 
+    /* ── Walkthrough panel ──────────────────────────────────────── */
+    #walkthroughPanel {
+      flex: 1; overflow-y: auto; display: none;
+      background: var(--bg); padding: 2rem 2.5rem;
+    }
+    #walkthroughPanel.active { display: block; }
+    #walkthroughContent { max-width: 860px; margin: 0 auto; }
+
+    .wt-layer { margin-bottom: 2.2rem; }
+    .wt-layer-header {
+      display: flex; align-items: center; gap: 0.6rem;
+      font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1.2px; color: var(--muted);
+      margin-bottom: 0.9rem; padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .wt-layer-header .lh-icon { font-size: 1rem; }
+    .wt-cards { display: flex; flex-wrap: wrap; gap: 0.85rem; }
+
+    .wt-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem 1.1rem;
+      border-left: 4px solid var(--accent); flex: 1 1 260px;
+      min-width: 220px; max-width: 420px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      cursor: pointer;
+    }
+    .wt-card:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent)22; }
+
+    .wt-card-top { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
+    .wt-card-name { font-size: 0.92rem; font-weight: 700; color: var(--text); font-family: "SF Mono", monospace; }
+    .wt-card-badge {
+      font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
+      border-radius: 4px; padding: 0.1rem 0.4rem; margin-left: auto; white-space: nowrap;
+    }
+    .wt-card-desc { font-size: 0.8rem; color: var(--muted); line-height: 1.55; margin-bottom: 0.6rem; }
+    .wt-card-files { display: flex; flex-direction: column; gap: 0.15rem; margin-bottom: 0.6rem; }
+    .wt-file { font-size: 0.7rem; color: var(--muted); font-family: "SF Mono", monospace; }
+
+    .wt-deps { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.3rem; }
+    .wt-dep-chip {
+      font-size: 0.68rem; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 0.12rem 0.5rem; color: var(--muted);
+    }
+    .wt-dep-label { font-size: 0.7rem; color: var(--muted); margin-right: 0.2rem; }
+
+    .wt-connector {
+      display: flex; align-items: center; gap: 0.5rem;
+      margin: 0.3rem 0 1.2rem; color: var(--muted); font-size: 0.72rem;
+    }
+    .wt-connector-line {
+      flex: 1; height: 1px; background: var(--border);
+    }
+    .wt-connector-arrow { font-size: 1rem; color: var(--accent); }
+
     @media (max-width: 640px) {
       #sidebar { width: 100%; min-width: 0; height: 40vh; border-right: none; border-bottom: 1px solid var(--border); }
       #appView.visible { flex-direction: column; }
@@ -525,8 +580,9 @@
     <!-- View toggle bar -->
     <div id="viewToggle">
       <span>View:</span>
-      <button class="view-tab active" id="tabInteractive" onclick="switchView('interactive')">⬡ Interactive</button>
-      <button class="view-tab"        id="tabFlowchart"   onclick="switchView('flowchart')">⬒ Flowchart</button>
+      <button class="view-tab active" id="tabInteractive"  onclick="switchView('interactive')">⬡ Interactive</button>
+      <button class="view-tab"        id="tabFlowchart"    onclick="switchView('flowchart')">⬒ Flowchart</button>
+      <button class="view-tab"        id="tabWalkthrough"  onclick="switchView('walkthrough')">≡ Walkthrough</button>
       <div id="cacheBadge">⚡ Cached</div>
     </div>
 
@@ -542,12 +598,17 @@
         <div class="legend-item"><div class="legend-dot" style="background:#79c0ff"></div>Database</div>
         <div class="legend-item"><div class="legend-dot" style="background:#56d364"></div>Test</div>
       </div>
-      <div id="hint">Click any node · Scroll to zoom · Drag to pan</div>
+      <div id="hint">▶ click a node to expand its children · drag to pan</div>
     </div>
 
     <!-- Mermaid panel -->
     <div id="mermaidPanel">
       <div class="mermaid" id="mermaidDiagram"></div>
+    </div>
+
+    <!-- Walkthrough panel -->
+    <div id="walkthroughPanel">
+      <div id="walkthroughContent"></div>
     </div>
 
   </div>
@@ -577,6 +638,11 @@
   let cy          = null;
   let activeView  = 'interactive';
 
+  // Progressive disclosure state
+  let allNodes    = [];   // full node list from API
+  let allEdges    = [];   // full edge list from API
+  let expandedIds = new Set();  // node ids that have been expanded
+
   const TYPE_COLORS = {
     entrypoint: '#58a6ff',
     module:     '#3fb950',
@@ -588,19 +654,138 @@
   };
   function typeColor(t) { return TYPE_COLORS[t?.toLowerCase()] || '#8b949e'; }
 
+  // Node label: add ▶ when expandable, ▼ when expanded
+  function nodeLabel(d) {
+    if (!d.has_children) return d.label;
+    return expandedIds.has(d.id) ? `▼ ${d.label}` : `▶ ${d.label}`;
+  }
+
   // ── View switcher ───────────────────────────────────────────
   function switchView(mode) {
     activeView = mode;
-    document.getElementById('tabInteractive').classList.toggle('active', mode === 'interactive');
-    document.getElementById('tabFlowchart').classList.toggle('active',   mode === 'flowchart');
-    document.getElementById('cyPanel').style.display       = mode === 'interactive' ? '' : 'none';
-    document.getElementById('mermaidPanel').classList.toggle('active', mode === 'flowchart');
+    document.getElementById('tabInteractive').classList.toggle('active',  mode === 'interactive');
+    document.getElementById('tabFlowchart').classList.toggle('active',    mode === 'flowchart');
+    document.getElementById('tabWalkthrough').classList.toggle('active',  mode === 'walkthrough');
+    document.getElementById('cyPanel').style.display = mode === 'interactive' ? '' : 'none';
+    document.getElementById('mermaidPanel').classList.toggle('active',    mode === 'flowchart');
+    document.getElementById('walkthroughPanel').classList.toggle('active',mode === 'walkthrough');
 
     // Node detail panel only makes sense in interactive mode
     document.getElementById('nodeDetail').classList.remove('visible');
     document.getElementById('nodeHint').style.display = mode === 'interactive' ? '' : 'none';
 
-    if (mode === 'flowchart' && currentData) renderMermaid(currentData);
+    if (mode === 'flowchart'   && currentData) renderMermaid(currentData);
+    if (mode === 'walkthrough' && currentData) renderWalkthrough(currentData);
+  }
+
+  // ── Walkthrough renderer ─────────────────────────────────────
+  const LAYER_DEFS = [
+    { key: 'entrypoint', icon: '🚀', label: 'Entry Points',       types: ['entrypoint'] },
+    { key: 'service',    icon: '⚙️', label: 'Services & APIs',    types: ['service'] },
+    { key: 'module',     icon: '📦', label: 'Modules',             types: ['module'] },
+    { key: 'database',   icon: '🗄️', label: 'Data & Storage',     types: ['database'] },
+    { key: 'config',     icon: '🔧', label: 'Configuration',       types: ['config'] },
+    { key: 'external',   icon: '🔌', label: 'External Dependencies',types: ['external'] },
+    { key: 'test',       icon: '🧪', label: 'Tests',               types: ['test'] },
+    { key: 'other',      icon: '📄', label: 'Other',               types: [] },
+  ];
+
+  function renderWalkthrough(data) {
+    const container = document.getElementById('walkthroughContent');
+    const nodes = data.nodes || [];
+    const edges = data.edges || [];
+
+    // Build dependency map: nodeId → list of node labels it depends on
+    const depsOf = {};
+    for (const e of edges) {
+      if (e.edge_type === 'imports') {
+        if (!depsOf[e.source]) depsOf[e.source] = [];
+        depsOf[e.source].push(e.target);
+      }
+    }
+    // id → node
+    const nodeById = Object.fromEntries(nodes.map(n => [n.id, n]));
+
+    // Group nodes into layers
+    const placed = new Set();
+    const layers = [];
+    for (const def of LAYER_DEFS) {
+      const group = nodes.filter(n => {
+        if (placed.has(n.id)) return false;
+        if (def.types.length === 0) return true;           // "other" catches leftovers
+        return def.types.includes(n.type?.toLowerCase());
+      });
+      if (group.length === 0) continue;
+      group.forEach(n => placed.add(n.id));
+      layers.push({ ...def, nodes: group });
+    }
+
+    let html = '';
+    for (let li = 0; li < layers.length; li++) {
+      const layer = layers[li];
+      html += `<div class="wt-layer">`;
+      html += `<div class="wt-layer-header"><span class="lh-icon">${layer.icon}</span>${layer.label}</div>`;
+      html += `<div class="wt-cards">`;
+
+      for (const n of layer.nodes) {
+        const color = typeColor(n.type);
+        const depIds = depsOf[n.id] || [];
+        const depNames = depIds.map(id => nodeById[id]?.label || id).filter(Boolean);
+
+        const filesHtml = (n.files || []).slice(0, 4).map(f =>
+          `<span class="wt-file">📄 ${f.split('/').pop()}</span>`
+        ).join('');
+
+        const depsHtml = depNames.length
+          ? `<div class="wt-deps"><span class="wt-dep-label">→ uses</span>${
+              depNames.map(d => `<span class="wt-dep-chip">${d}</span>`).join('')
+            }</div>`
+          : '';
+
+        html += `
+          <div class="wt-card" style="border-left-color:${color}"
+               onclick="switchView('interactive'); setTimeout(()=>highlightNode('${n.id}'),300)">
+            <div class="wt-card-top">
+              <span class="wt-card-name">${n.label}</span>
+              <span class="wt-card-badge" style="background:${color}22;color:${color}">${n.type || 'module'}</span>
+            </div>
+            <p class="wt-card-desc">${n.description || ''}</p>
+            ${filesHtml ? `<div class="wt-card-files">${filesHtml}</div>` : ''}
+            ${depsHtml}
+          </div>`;
+      }
+
+      html += `</div></div>`;  // close wt-cards + wt-layer
+
+      // Connector between layers
+      if (li < layers.length - 1) {
+        html += `<div class="wt-connector">
+          <div class="wt-connector-line"></div>
+          <span class="wt-connector-arrow">↓</span>
+          <div class="wt-connector-line"></div>
+        </div>`;
+      }
+    }
+
+    container.innerHTML = html;
+  }
+
+  // Highlight a specific node in cytoscape (used when clicking a walkthrough card)
+  function highlightNode(nodeId) {
+    if (!cy) return;
+    // Try the node currently in the graph; if not visible, expand from root first
+    let node = cy.getElementById(nodeId);
+    if (node.empty()) {
+      // Node not yet rendered — just fit to root and return
+      cy.fit(60);
+      return;
+    }
+    cy.elements().removeClass('highlighted dimmed');
+    node.addClass('highlighted');
+    node.neighborhood().removeClass('dimmed');
+    cy.elements().not(node).not(node.neighborhood()).addClass('dimmed');
+    cy.animate({ fit: { eles: node, padding: 80 } }, { duration: 400 });
+    showNodeDetail(node.data());
   }
 
   // ── Mermaid renderer ────────────────────────────────────────
@@ -648,132 +833,315 @@
     }
   }
 
-  // ── Cytoscape renderer ──────────────────────────────────────
+  // ── Cytoscape style + layout (shared config) ────────────────
+  const CY_STYLE = [
+    {
+      selector: 'node',
+      style: {
+        'background-color':   'data(color)',
+        'label':              'data(displayLabel)',
+        'color':              '#e6edf3',
+        'font-size':          '12px',
+        'font-weight':        '600',
+        'text-valign':        'center',
+        'text-halign':        'center',
+        'text-wrap':          'wrap',
+        'text-max-width':     '110px',
+        'text-outline-color': 'data(color)',
+        'text-outline-width': '1px',
+        'shape':              'round-rectangle',
+        'width':              'label',
+        'height':             'label',
+        'padding':            '12px',
+        'border-width':       '2px',
+        'border-color':       '#30363d',
+        'transition-property':'border-color, opacity',
+        'transition-duration':'0.15s',
+      }
+    },
+    { selector: 'node.expandable', style: { 'border-style': 'dashed', 'border-color': '#555d68' } },
+    { selector: 'node.expanded',   style: { 'border-color': 'data(color)', 'border-width': '2.5px' } },
+    { selector: 'node.highlighted', style: { 'border-color': '#fff', 'border-width': '2.5px' } },
+    { selector: 'node.dimmed',      style: { 'opacity': '0.25' } },
+    {
+      selector: 'edge[edge_type = "contains"]',
+      style: {
+        'width': 1.5, 'line-color': '#30363d', 'target-arrow-color': '#30363d',
+        'target-arrow-shape': 'triangle', 'curve-style': 'bezier',
+        'line-style': 'dashed', 'opacity': '0.5',
+      }
+    },
+    {
+      selector: 'edge[edge_type = "imports"]',
+      style: {
+        'width': 2, 'line-color': '#58a6ff', 'target-arrow-color': '#58a6ff',
+        'target-arrow-shape': 'triangle', 'curve-style': 'bezier',
+        'label': 'data(label)', 'font-size': '9px', 'color': '#8b949e',
+        'text-background-color': '#0d1117', 'text-background-opacity': 1,
+        'text-background-padding': '2px', 'edge-text-rotation': 'autorotate',
+        'opacity': '0.8',
+      }
+    },
+    {
+      selector: 'edge',  // fallback for edges without edge_type
+      style: {
+        'width': 1.5, 'line-color': '#444d58', 'target-arrow-color': '#444d58',
+        'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'opacity': '0.7',
+      }
+    },
+    { selector: 'edge.highlighted', style: { 'line-color': '#58a6ff', 'target-arrow-color': '#58a6ff', 'opacity': '1', 'width': 2.5 } },
+    { selector: 'edge.dimmed',      style: { 'opacity': '0.04' } },
+  ];
+
+  const LAYOUT_OPTS = {
+    name: 'dagre', rankDir: 'TB', rankSep: 90, nodeSep: 60,
+    edgeSep: 10, animate: true, animationDuration: 400, padding: 60,
+  };
+
+  // ── Build a cytoscape element from a node object ─────────────
+  function nodeElement(n) {
+    return {
+      data: {
+        id:           n.id,
+        label:        n.label,
+        displayLabel: nodeLabel(n),
+        type:         n.type,
+        description:  n.description,
+        files:        n.files || [],
+        has_children: n.has_children,
+        parent_id:    n.parent_id,
+        depth:        n.depth,
+        color:        typeColor(n.type),
+        edge_type:    undefined,
+      }
+    };
+  }
+
+  function edgeElement(e, i) {
+    return {
+      data: {
+        id:        `e_${e.source}_${e.target}_${i}`,
+        source:    e.source,
+        target:    e.target,
+        label:     e.edge_type === 'imports' ? 'imports' : '',
+        edge_type: e.edge_type || 'contains',
+      }
+    };
+  }
+
+  // ── Get descendants of a node ─────────────────────────────────
+  function getDescendants(nodeId) {
+    const result = [];
+    const queue  = [nodeId];
+    while (queue.length) {
+      const id       = queue.shift();
+      const children = allNodes.filter(n => n.parent_id === id);
+      children.forEach(c => { result.push(c.id); queue.push(c.id); });
+    }
+    return result;
+  }
+
+  // ── Re-run layout preserving pan ─────────────────────────────
+  function reLayout() {
+    cy.layout({ ...LAYOUT_OPTS, fit: false }).run();
+  }
+
+  // ── Expand a node: add its direct children (up to INITIAL_LIMIT) ────────────
+  function expandNode(nodeId) {
+    expandedIds.add(nodeId);
+
+    const allChildren = allNodes.filter(n => n.parent_id === nodeId);
+    const shown       = allChildren.slice(0, INITIAL_LIMIT);
+    const hiddenCount = allChildren.length - shown.length;
+
+    // Add child nodes
+    cy.add(shown.map(n => nodeElement(n)));
+
+    // Add edges whose both endpoints are now visible
+    const newVisibleIds = new Set(cy.nodes().map(n => n.id()));
+    allEdges.forEach((e, i) => {
+      if (newVisibleIds.has(e.source) && newVisibleIds.has(e.target)) {
+        const eid = `e_${e.source}_${e.target}_${i}`;
+        if (!cy.getElementById(eid).length) cy.add(edgeElement(e, i));
+      }
+    });
+
+    // Update parent label
+    const parentNode = cy.getElementById(nodeId);
+    const d = parentNode.data();
+    const moreLabel = hiddenCount > 0 ? ` (+${hiddenCount} more)` : '';
+    parentNode.data('displayLabel', `▼ ${d.label}${moreLabel}`);
+    parentNode.addClass('expanded').removeClass('expandable');
+
+    // If there are more hidden children, store count so user knows to zoom
+    if (hiddenCount > 0) {
+      parentNode.data('hiddenCount', hiddenCount);
+      parentNode.data('hiddenOffset', shown.length);
+    }
+
+    // Mark new expandable children
+    shown.forEach(c => {
+      if (c.has_children) cy.getElementById(c.id).addClass('expandable');
+    });
+
+    reLayout();
+  }
+
+  // ── Load more hidden children of an already-expanded node ────────────────────
+  function loadMoreChildren(nodeId) {
+    const parentNode  = cy.getElementById(nodeId);
+    const offset      = parentNode.data('hiddenOffset') || 0;
+    const allChildren = allNodes.filter(n => n.parent_id === nodeId);
+    const nextBatch   = allChildren.slice(offset, offset + INITIAL_LIMIT);
+    const remaining   = allChildren.length - offset - nextBatch.length;
+
+    cy.add(nextBatch.map(n => nodeElement(n)));
+
+    const newVisibleIds = new Set(cy.nodes().map(n => n.id()));
+    allEdges.forEach((e, i) => {
+      if (newVisibleIds.has(e.source) && newVisibleIds.has(e.target)) {
+        const eid = `e_${e.source}_${e.target}_${i}`;
+        if (!cy.getElementById(eid).length) cy.add(edgeElement(e, i));
+      }
+    });
+
+    const d = parentNode.data();
+    const moreLabel = remaining > 0 ? ` (+${remaining} more)` : '';
+    parentNode.data('displayLabel', `▼ ${d.label}${moreLabel}`);
+    parentNode.data('hiddenOffset', offset + nextBatch.length);
+    parentNode.data('hiddenCount', remaining);
+
+    nextBatch.forEach(c => {
+      if (c.has_children) cy.getElementById(c.id).addClass('expandable');
+    });
+
+    reLayout();
+  }
+
+  // ── Collapse a node: remove all descendants ───────────────────
+  function collapseNode(nodeId) {
+    expandedIds.delete(nodeId);
+
+    const descendants = getDescendants(nodeId);
+    descendants.forEach(id => {
+      expandedIds.delete(id);
+      cy.getElementById(id).remove();
+    });
+
+    // Remove dangling edges
+    cy.edges().forEach(e => {
+      if (!cy.getElementById(e.data('source')).length || !cy.getElementById(e.data('target')).length) {
+        e.remove();
+      }
+    });
+
+    // Reset label
+    const node = cy.getElementById(nodeId);
+    const d    = node.data();
+    node.data('displayLabel', `▶ ${d.label}`);
+    node.removeClass('expanded').addClass('expandable');
+
+    reLayout();
+  }
+
+  // ── Show node detail in sidebar ───────────────────────────────
+  function showNodeDetail(d) {
+    document.getElementById('nodeLabel').textContent = d.label;
+    document.getElementById('nodeDesc').textContent  = d.description || '';
+    document.getElementById('nodeFiles').innerHTML   = (d.files || []).map(f => `<span>📄 ${f}</span>`).join('');
+
+    const badge = document.getElementById('nodeTypeBadge');
+    badge.textContent      = d.type || 'module';
+    badge.style.background = typeColor(d.type) + '22';
+    badge.style.color      = typeColor(d.type);
+    badge.style.border     = `1px solid ${typeColor(d.type)}55`;
+
+    document.getElementById('nodeDetail').classList.add('visible');
+    document.getElementById('nodeHint').style.display = 'none';
+  }
+
+  // ── Initial cytoscape render (depth 0 + 1, all shown; depth 2+ on click) ──
+  const INITIAL_LIMIT = 10; // used only for batch-loading deeper children
+
   function renderCytoscape(data) {
-    const elements = [];
+    allNodes    = data.nodes || [];
+    allEdges    = data.edges || [];
+    expandedIds = new Set();
 
-    (data.nodes || []).forEach(n => {
-      elements.push({ data: {
-        id:          n.id,
-        label:       n.label,
-        type:        n.type,
-        description: n.description,
-        files:       n.files || [],
-        color:       typeColor(n.type),
-      }});
-    });
+    // Show root + ALL depth-1 nodes upfront; depth 2+ only on user expansion
+    const rootNode  = allNodes.find(n => n.depth === 0);
+    const depth1    = allNodes.filter(n => n.depth === 1);
 
-    (data.edges || []).forEach((e, i) => {
-      elements.push({ data: {
-        id:     `e${i}`,
-        source: e.source,
-        target: e.target,
-        label:  e.label || '',
-      }});
-    });
+    const initialNodes = [rootNode, ...depth1].filter(Boolean);
+    const initialIds   = new Set(initialNodes.map(n => n.id));
+    const initialEdges = allEdges.filter(e => initialIds.has(e.source) && initialIds.has(e.target));
+
+    // Mark root and all depth-1 nodes as expanded so clicking them expands their children
+    if (rootNode) expandedIds.add(rootNode.id);
+    depth1.forEach(n => { if (n.has_children) expandedIds.add(n.id); });
+
+    // Mark root as expanded (its visible children are shown)
+    if (rootNode) expandedIds.add(rootNode.id);
+
+    const elements = [
+      ...initialNodes.map(n => nodeElement(n)),
+      ...initialEdges.map((e, i) => edgeElement(e, i)),
+    ];
 
     if (cy) cy.destroy();
 
     cy = cytoscape({
-      container: document.getElementById('cy'),
+      container:           document.getElementById('cy'),
       elements,
-      style: [
-        {
-          selector: 'node',
-          style: {
-            'background-color':   'data(color)',
-            'label':              'data(label)',
-            'color':              '#e6edf3',
-            'font-size':          '12px',
-            'font-weight':        '600',
-            'text-valign':        'center',
-            'text-halign':        'center',
-            'text-wrap':          'wrap',
-            'text-max-width':     '100px',
-            'text-outline-color': 'data(color)',
-            'text-outline-width': '1px',
-            'shape':              'round-rectangle',
-            'width':              'label',
-            'height':             'label',
-            'padding':            '12px',
-            'border-width':       '2px',
-            'border-color':       '#30363d',
-            'transition-property':'border-color, opacity',
-            'transition-duration':'0.15s',
-          }
-        },
-        { selector: 'node:selected',   style: { 'border-color': '#fff', 'border-width': '2.5px' } },
-        { selector: 'node.highlighted', style: { 'border-color': '#fff', 'border-width': '2.5px' } },
-        { selector: 'node.dimmed',      style: { 'opacity': '0.25' } },
-        {
-          selector: 'edge',
-          style: {
-            'width':                   2,
-            'line-color':              '#444d58',
-            'target-arrow-color':      '#444d58',
-            'target-arrow-shape':      'triangle',
-            'curve-style':             'bezier',
-            'label':                   'data(label)',
-            'font-size':               '9px',
-            'color':                   '#8b949e',
-            'text-background-color':   '#0d1117',
-            'text-background-opacity': 1,
-            'text-background-padding': '2px',
-            'edge-text-rotation':      'autorotate',
-            'opacity':                 '0.8',
-          }
-        },
-        {
-          selector: 'edge.highlighted',
-          style: { 'line-color': '#58a6ff', 'target-arrow-color': '#58a6ff', 'opacity': '1', 'width': 2.5 }
-        },
-        { selector: 'edge.dimmed', style: { 'opacity': '0.05' } },
-      ],
-      layout: {
-        name:             'dagre',
-        rankDir:          'TB',
-        rankSep:          90,
-        nodeSep:          60,
-        edgeSep:          10,
-        animate:          true,
-        animationDuration: 500,
-        fit:              true,
-        padding:          60,
-      },
+      style:               CY_STYLE,
+      layout:              { ...LAYOUT_OPTS, fit: true },
       userZoomingEnabled:  true,
       userPanningEnabled:  true,
       boxSelectionEnabled: false,
     });
 
-    // Fade hint
+    // Mark expandable nodes
+    cy.nodes().forEach(n => {
+      const d = n.data();
+      if (d.has_children && !expandedIds.has(d.id)) n.addClass('expandable');
+      if (expandedIds.has(d.id)) n.addClass('expanded');
+    });
+
+    // Fade hint after 4s
     setTimeout(() => {
       const h = document.getElementById('hint');
       if (h) h.style.opacity = '0';
     }, 4000);
 
+    // Node tap: expand/collapse if has children, otherwise show detail
     cy.on('tap', 'node', function(evt) {
       const node = evt.target;
       const d    = node.data();
 
       cy.elements().removeClass('highlighted dimmed');
+
+      if (d.has_children) {
+        if (expandedIds.has(d.id)) {
+          if (d.hiddenCount > 0) {
+            // Already expanded but has more children — load next batch
+            loadMoreChildren(d.id);
+          } else {
+            // Fully expanded — collapse
+            collapseNode(d.id);
+          }
+        } else {
+          expandNode(d.id);
+        }
+      }
+
+      // Always show detail panel
       const nbhd = node.closedNeighborhood();
       cy.elements().not(nbhd).addClass('dimmed');
       nbhd.addClass('highlighted');
-
-      document.getElementById('nodeLabel').textContent = d.label;
-      document.getElementById('nodeDesc').textContent  = d.description || '';
-      document.getElementById('nodeFiles').innerHTML   = (d.files || []).map(f => `<span>📄 ${f}</span>`).join('');
-
-      const badge = document.getElementById('nodeTypeBadge');
-      badge.textContent       = d.type || 'module';
-      badge.style.background  = typeColor(d.type) + '22';
-      badge.style.color       = typeColor(d.type);
-      badge.style.border      = `1px solid ${typeColor(d.type)}55`;
-
-      document.getElementById('nodeDetail').classList.add('visible');
-      document.getElementById('nodeHint').style.display = 'none';
+      showNodeDetail(d);
     });
 
+    // Tap background → deselect
     cy.on('tap', function(evt) {
       if (evt.target === cy) {
         cy.elements().removeClass('highlighted dimmed');
@@ -907,6 +1275,12 @@
   });
 
   loadRecent();
+
+  // Pre-fill with a demo repo so visitors can hit Analyze immediately
+  const input = document.getElementById('urlInput');
+  if (!input.value) {
+    input.value = 'https://github.com/tiangolo/fastapi';
+  }
 </script>
 
 </body>
