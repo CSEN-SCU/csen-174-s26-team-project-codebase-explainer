@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GitMap — Demo</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --surface: #161b22; --surface2: #1e2633;
+      --border: #30363d; --accent: #58a6ff; --accent2: #3fb950;
+      --text: #e6edf3; --muted: #8b949e; --radius: 10px;
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { display: flex; flex-direction: row; height: 100vh; overflow: hidden; }
+
+    /* Sidebar */
+    #sidebar {
+      width: 280px; min-width: 240px; background: var(--surface);
+      border-right: 1px solid var(--border); display: flex;
+      flex-direction: column; overflow: hidden;
+    }
+    .sidebar-header {
+      padding: 1rem 1.2rem 0.8rem; border-bottom: 1px solid var(--border);
+      display: flex; align-items: baseline; gap: 0.5rem;
+    }
+    .logo {
+      font-size: 1.3rem; font-weight: 800;
+      background: linear-gradient(135deg, #58a6ff, #3fb950);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .demo-tag {
+      font-size: 0.65rem; background: #f78166; color: #0d1117;
+      padding: 0.1rem 0.4rem; border-radius: 4px; font-weight: 700;
+    }
+    #sidebarBody { flex: 1; overflow-y: auto; padding: 1rem 1.2rem; }
+    #sidebarBody::-webkit-scrollbar { width: 4px; }
+    #sidebarBody::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .sec-label {
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--muted); margin-bottom: 0.4rem; margin-top: 1rem;
+    }
+    .sec-label:first-child { margin-top: 0; }
+    #summaryText { font-size: 0.83rem; line-height: 1.6; color: var(--text); }
+    .tech-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem; }
+    .tech-chip {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 0.18rem 0.55rem; font-size: 0.72rem; color: var(--muted);
+    }
+    #nodePanel {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0.8rem 1rem; margin-top: 0.4rem; display: none;
+    }
+    #nodePanel.visible { display: block; }
+    #nodePanel .n-label { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.2rem; }
+    .n-badge {
+      display: inline-block; font-size: 0.65rem; font-weight: 700;
+      text-transform: uppercase; border-radius: 4px; padding: 0.12rem 0.45rem; margin-bottom: 0.5rem;
+    }
+    #nodePanel .n-desc { font-size: 0.8rem; color: var(--muted); line-height: 1.5; margin-bottom: 0.6rem; }
+    #nodePanel .n-files { font-size: 0.72rem; font-family: monospace; color: var(--muted);
+      display: flex; flex-direction: column; gap: 0.2rem; }
+    #clickHint { font-size: 0.78rem; color: var(--muted); margin-top: 0.4rem; }
+
+    /* Tree panel */
+    #treePanel {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0.7rem 0.9rem; margin-top: 0.4rem;
+      font-family: "SF Mono", "Fira Code", monospace; font-size: 0.72rem;
+      color: var(--muted); line-height: 1.6; max-height: 220px; overflow-y: auto;
+    }
+
+    .sidebar-footer {
+      padding: 0.7rem 1.2rem; border-top: 1px solid var(--border);
+      font-size: 0.72rem; color: var(--muted); line-height: 1.5;
+    }
+
+    /* Graph area */
+    #graphWrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    #toolbar {
+      padding: 0.5rem 1rem; border-bottom: 1px solid var(--border);
+      background: var(--surface); display: flex; align-items: center; gap: 0.6rem;
+      font-size: 0.78rem; flex-shrink: 0;
+    }
+    #toolbar span { color: var(--muted); }
+    .repo-pill {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 0.25rem 0.7rem; font-size: 0.75rem; color: var(--text);
+      cursor: pointer; transition: border-color 0.15s;
+    }
+    .repo-pill:hover { border-color: var(--accent); }
+    .repo-pill.active { border-color: var(--accent); color: var(--accent); }
+
+    #nodeCount {
+      margin-left: auto; font-size: 0.72rem; color: var(--muted);
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 0.2rem 0.6rem;
+    }
+
+    #cy { flex: 1; }
+
+    #hint {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 20px; padding: 0.3rem 1rem; font-size: 0.72rem;
+      color: var(--muted); pointer-events: none; transition: opacity 0.5s;
+      white-space: nowrap;
+    }
+    #graphContainer { flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column; }
+
+    /* Legend */
+    #legend {
+      position: absolute; bottom: 16px; right: 16px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0.6rem 0.8rem;
+      display: flex; flex-direction: column; gap: 0.3rem;
+    }
+    .leg { display: flex; align-items: center; gap: 0.45rem; font-size: 0.68rem; color: var(--muted); }
+    .leg-dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+
+    /* View tabs */
+    .view-tab {
+      background: none; border: 1px solid var(--border); border-radius: 6px;
+      color: var(--muted); padding: 0.25rem 0.65rem; font-size: 0.72rem;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .view-tab:hover { border-color: var(--accent); color: var(--text); }
+    .view-tab.active { border-color: var(--accent); color: var(--accent); background: var(--accent)11; }
+
+    /* Walkthrough cards */
+    .wt-layer { margin-bottom: 2rem; }
+    .wt-layer-header {
+      display: flex; align-items: center; gap: 0.6rem;
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1.2px; color: var(--muted);
+      margin-bottom: 0.8rem; padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .wt-cards { display: flex; flex-wrap: wrap; gap: 0.8rem; }
+    .wt-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 0.9rem 1rem;
+      border-left: 4px solid #58a6ff; flex: 1 1 240px;
+      min-width: 200px; max-width: 400px; cursor: pointer;
+      transition: box-shadow 0.15s;
+    }
+    .wt-card:hover { box-shadow: 0 0 0 1px var(--accent)33; }
+    .wt-card-top { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; }
+    .wt-card-name { font-size: 0.88rem; font-weight: 700; color: var(--text); font-family: "SF Mono", monospace; }
+    .wt-card-badge {
+      font-size: 0.58rem; font-weight: 700; text-transform: uppercase;
+      border-radius: 4px; padding: 0.1rem 0.4rem; margin-left: auto;
+    }
+    .wt-card-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.5; margin-bottom: 0.5rem; }
+    .wt-card-files { font-size: 0.68rem; color: var(--muted); font-family: monospace; margin-bottom: 0.4rem; }
+    .wt-deps { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+    .wt-dep-label { font-size: 0.68rem; color: var(--muted); }
+    .wt-dep-chip {
+      font-size: 0.66rem; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 0.1rem 0.45rem; color: var(--muted);
+    }
+    .wt-connector {
+      display: flex; align-items: center; gap: 0.5rem;
+      color: var(--muted); font-size: 0.72rem; margin: 0.2rem 0 1rem;
+    }
+    .wt-connector-line { flex: 1; height: 1px; background: var(--border); }
+    .wt-connector-arrow { color: var(--accent); font-size: 1rem; }
+  </style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside id="sidebar">
+  <div class="sidebar-header">
+    <span class="logo">GitMap</span>
+    <span class="demo-tag">DEMO</span>
+  </div>
+  <div id="sidebarBody">
+    <div class="sec-label">Overview</div>
+    <p id="summaryText">Select a sample repo above to load its architecture.</p>
+
+    <div class="sec-label">Tech Stack</div>
+    <div class="tech-chips" id="techChips"></div>
+
+    <div class="sec-label">Component</div>
+    <div id="nodePanel">
+      <div class="n-label" id="nLabel"></div>
+      <span class="n-badge" id="nBadge"></span>
+      <p class="n-desc" id="nDesc"></p>
+      <div class="n-files" id="nFiles"></div>
+    </div>
+    <p id="clickHint">Click a node to see details.</p>
+
+    <div class="sec-label">File Tree (sent to AI)</div>
+    <div id="treePanel"></div>
+  </div>
+  <div class="sidebar-footer">
+    Top-level structure shown on load<br>
+    ▶ Click any node to expand its children<br>
+    Click again to collapse
+  </div>
+</aside>
+
+<!-- Graph -->
+<div id="graphWrap">
+  <div id="toolbar">
+    <span>Sample repo:</span>
+    <div class="repo-pill active" onclick="loadRepo('gitmap', event)">GitMap (this project)</div>
+    <div class="repo-pill" onclick="loadRepo('fastapi', event)">FastAPI</div>
+    <div class="repo-pill" onclick="loadRepo('react', event)">React App</div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:0.5rem;">
+      <button class="view-tab active" id="tabInteractive" onclick="switchView('interactive')">⬡ Interactive</button>
+      <button class="view-tab" id="tabWalkthrough" onclick="switchView('walkthrough')">≡ Walkthrough</button>
+      <div id="nodeCount">10 / 10 nodes</div>
+    </div>
+  </div>
+  <div id="graphContainer">
+    <div id="cy"></div>
+    <div id="hint">▶ click a node to expand its children · drag to pan</div>
+    <div id="legend">
+      <div class="leg"><div class="leg-dot" style="background:#58a6ff"></div>Entrypoint</div>
+      <div class="leg"><div class="leg-dot" style="background:#3fb950"></div>Module</div>
+      <div class="leg"><div class="leg-dot" style="background:#d2a8ff"></div>Service</div>
+      <div class="leg"><div class="leg-dot" style="background:#e3b341"></div>Config</div>
+      <div class="leg"><div class="leg-dot" style="background:#f78166"></div>External</div>
+      <div class="leg"><div class="leg-dot" style="background:#79c0ff"></div>Database</div>
+      <div class="leg"><div class="leg-dot" style="background:#56d364"></div>Test</div>
+    </div>
+    <!-- Walkthrough panel (hidden by default) -->
+    <div id="walkthroughPanel" style="display:none;position:absolute;inset:0;overflow-y:auto;background:var(--bg);padding:2rem 2.5rem;">
+      <div id="walkthroughContent" style="max-width:860px;margin:0 auto;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+cytoscape.use(cytoscapeDagre);
+
+// ── Sample repo data (simulates what the backend would return) ─────────────────
+const REPOS = {
+  gitmap: {
+    summary: "GitMap analyzes GitHub repositories and generates interactive visual architecture maps. Paste a URL and get an AI-powered graph showing modules, dependencies, and how components connect.",
+    tech_stack: ["python", "fastapi", "openai", "sqlite", "cytoscape.js", "mermaid.js"],
+    tree: `gitmap/
+├── backend/
+│   ├── main.py
+│   ├── ai_analyzer.py
+│   ├── github_fetcher.py
+│   ├── database.py
+│   └── requirements.txt
+├── frontend/
+│   ├── index.html
+│   └── demo.html
+├── README.md
+├── product-vision.md
+└── .env.example`,
+    nodes: [
+      { id: "root",            label: "gitmap",          type: "entrypoint", depth: 0, parent_id: null,     has_children: true,  description: "GitMap — visualize any GitHub repo as an interactive architecture graph.", files: ["README.md", ".env.example"] },
+      { id: "backend",         label: "backend",         type: "service",    depth: 1, parent_id: "root",    has_children: true,  description: "FastAPI backend — handles repo fetching, AI analysis, and SQLite caching.", files: ["main.py", "requirements.txt"] },
+      { id: "frontend",        label: "frontend",        type: "module",     depth: 1, parent_id: "root",    has_children: true,  description: "Single-file web UI — landing page, Cytoscape.js graph, and Mermaid flowchart view.", files: ["index.html", "demo.html"] },
+      { id: "ext_openai",      label: "openai",          type: "external",   depth: 1, parent_id: null,      has_children: false, description: "OpenAI GPT-4o — generates per-module descriptions and dependency analysis from the tree.", files: [] },
+      { id: "ext_github",      label: "GitHub API",      type: "external",   depth: 1, parent_id: null,      has_children: false, description: "GitHub REST API — fetches the file tree and raw file contents for any public repo.", files: [] },
+      // backend children
+      { id: "backend__main",         label: "main.py",          type: "entrypoint", depth: 2, parent_id: "backend",  has_children: false, description: "FastAPI app — defines /analyze, /recent, /cache endpoints and serves the frontend.", files: ["main.py"] },
+      { id: "backend__ai_analyzer",  label: "ai_analyzer.py",   type: "service",    depth: 2, parent_id: "backend",  has_children: false, description: "Formats file tree as `tree` output, calls GPT-4o, builds graph from real paths.", files: ["ai_analyzer.py"] },
+      { id: "backend__github",       label: "github_fetcher.py",type: "service",    depth: 2, parent_id: "backend",  has_children: false, description: "Fetches repo tree and key file contents from the GitHub API concurrently.", files: ["github_fetcher.py"] },
+      { id: "backend__database",     label: "database.py",      type: "database",   depth: 2, parent_id: "backend",  has_children: false, description: "SQLite layer — caches every analysis so repeat lookups are instant.", files: ["database.py"] },
+      // frontend children
+      { id: "frontend__index",       label: "index.html",       type: "entrypoint", depth: 2, parent_id: "frontend", has_children: false, description: "Main app — landing page, Cytoscape.js interactive graph, Mermaid flowchart, sidebar.", files: ["index.html"] },
+      { id: "frontend__demo",        label: "demo.html",        type: "module",     depth: 2, parent_id: "frontend", has_children: false, description: "Standalone demo with sample data — no backend needed to run.", files: ["demo.html"] },
+    ],
+    edges: [
+      { source: "root",           target: "backend",              label: "",        edge_type: "contains" },
+      { source: "root",           target: "frontend",             label: "",        edge_type: "contains" },
+      { source: "backend",        target: "backend__main",        label: "",        edge_type: "contains" },
+      { source: "backend",        target: "backend__ai_analyzer", label: "",        edge_type: "contains" },
+      { source: "backend",        target: "backend__github",      label: "",        edge_type: "contains" },
+      { source: "backend",        target: "backend__database",    label: "",        edge_type: "contains" },
+      { source: "frontend",       target: "frontend__index",      label: "",        edge_type: "contains" },
+      { source: "frontend",       target: "frontend__demo",       label: "",        edge_type: "contains" },
+      { source: "backend__main",         target: "backend__ai_analyzer",  label: "calls",   edge_type: "imports" },
+      { source: "backend__main",         target: "backend__github",        label: "calls",   edge_type: "imports" },
+      { source: "backend__main",         target: "backend__database",      label: "caches",  edge_type: "imports" },
+      { source: "backend__ai_analyzer",  target: "ext_openai",             label: "GPT-4o",  edge_type: "imports" },
+      { source: "backend__github",       target: "ext_github",             label: "REST",    edge_type: "imports" },
+    ],
+  },
+
+  fastapi: {
+    summary: "FastAPI is a modern, fast web framework for building APIs with Python, based on standard Python type hints. It auto-generates OpenAPI docs and is one of the fastest Python frameworks available.",
+    tech_stack: ["python", "pydantic", "starlette", "uvicorn", "openapi"],
+    tree: `fastapi/
+├── fastapi/
+│   ├── __init__.py
+│   ├── applications.py
+│   ├── routing.py
+│   ├── dependencies/
+│   │   └── utils.py
+│   ├── security/
+│   │   ├── oauth2.py
+│   │   └── api_key.py
+│   └── middleware/
+│       └── cors.py
+├── tests/
+│   ├── test_application.py
+│   └── test_routing.py
+├── docs/
+│   └── index.md
+└── pyproject.toml`,
+    nodes: [
+      { id: "root",         label: "fastapi",       type: "entrypoint", depth: 0, parent_id: null,      has_children: true,  description: "FastAPI — high-performance Python web framework with automatic OpenAPI doc generation.", files: ["pyproject.toml"] },
+      { id: "fastapi",      label: "fastapi/",      type: "service",    depth: 1, parent_id: "root",    has_children: true,  description: "Core library — application class, routing, request/response handling, and OpenAPI generation.", files: ["applications.py", "routing.py"] },
+      { id: "tests",        label: "tests/",        type: "test",       depth: 1, parent_id: "root",    has_children: true,  description: "Test suite covering routing, dependencies, security, and middleware.", files: [] },
+      { id: "docs",         label: "docs/",         type: "config",     depth: 1, parent_id: "root",    has_children: false, description: "MkDocs documentation source.", files: ["index.md"] },
+      { id: "ext_starlette",label: "starlette",     type: "external",   depth: 1, parent_id: null,      has_children: false, description: "ASGI foundation — FastAPI is built directly on top of Starlette's request/response layer.", files: [] },
+      { id: "ext_pydantic", label: "pydantic",      type: "external",   depth: 1, parent_id: null,      has_children: false, description: "Data validation via Python type hints — powers request/response model validation.", files: [] },
+      // fastapi/ children
+      { id: "fastapi__app",  label: "applications.py", type: "entrypoint", depth: 2, parent_id: "fastapi", has_children: false, description: "FastAPI class — main app object, mounts routers, configures OpenAPI.", files: ["applications.py"] },
+      { id: "fastapi__routing", label: "routing.py",   type: "service",    depth: 2, parent_id: "fastapi", has_children: false, description: "APIRouter — path operation decorators, dependency injection, response models.", files: ["routing.py"] },
+      { id: "fastapi__deps", label: "dependencies/", type: "module",     depth: 2, parent_id: "fastapi", has_children: false, description: "Dependency injection utilities — Depends(), Security(), resolves nested deps.", files: ["utils.py"] },
+      { id: "fastapi__sec",  label: "security/",    type: "config",     depth: 2, parent_id: "fastapi", has_children: false, description: "Auth schemes — OAuth2, API key, HTTP bearer token handling.", files: ["oauth2.py", "api_key.py"] },
+      { id: "fastapi__mw",   label: "middleware/",  type: "service",    depth: 2, parent_id: "fastapi", has_children: false, description: "CORS, GZip, HTTPS redirect middleware.", files: ["cors.py"] },
+    ],
+    edges: [
+      { source: "root",    target: "fastapi",         label: "",        edge_type: "contains" },
+      { source: "root",    target: "tests",            label: "",        edge_type: "contains" },
+      { source: "root",    target: "docs",             label: "",        edge_type: "contains" },
+      { source: "fastapi", target: "fastapi__app",     label: "",        edge_type: "contains" },
+      { source: "fastapi", target: "fastapi__routing", label: "",        edge_type: "contains" },
+      { source: "fastapi", target: "fastapi__deps",    label: "",        edge_type: "contains" },
+      { source: "fastapi", target: "fastapi__sec",     label: "",        edge_type: "contains" },
+      { source: "fastapi", target: "fastapi__mw",      label: "",        edge_type: "contains" },
+      { source: "fastapi__app",     target: "fastapi__routing", label: "uses",    edge_type: "imports" },
+      { source: "fastapi__routing", target: "fastapi__deps",    label: "injects", edge_type: "imports" },
+      { source: "fastapi__routing", target: "ext_pydantic",     label: "models",  edge_type: "imports" },
+      { source: "fastapi__app",     target: "ext_starlette",    label: "extends", edge_type: "imports" },
+    ],
+  },
+
+  react: {
+    summary: "A standard Create React App project with a component-based frontend, custom hooks, a REST API service layer, and a shared context for global state management.",
+    tech_stack: ["react", "javascript", "css", "jest", "fetch api"],
+    tree: `my-react-app/
+├── src/
+│   ├── index.js
+│   ├── App.js
+│   ├── components/
+│   │   ├── Header.js
+│   │   ├── Footer.js
+│   │   └── Button.js
+│   ├── pages/
+│   │   ├── Home.js
+│   │   └── Dashboard.js
+│   ├── hooks/
+│   │   └── useFetch.js
+│   ├── context/
+│   │   └── AuthContext.js
+│   └── services/
+│       └── api.js
+├── public/
+│   └── index.html
+├── tests/
+│   └── App.test.js
+└── package.json`,
+    nodes: [
+      { id: "root",       label: "my-react-app", type: "entrypoint", depth: 0, parent_id: null,    has_children: true,  description: "React frontend app — component-based UI with hooks, context, and a REST API service layer.", files: ["package.json"] },
+      { id: "src",        label: "src/",         type: "module",     depth: 1, parent_id: "root",  has_children: true,  description: "Application source — entry point, pages, components, hooks, context, and API service.", files: ["index.js", "App.js"] },
+      { id: "public",     label: "public/",      type: "config",     depth: 1, parent_id: "root",  has_children: false, description: "Static assets and HTML shell served by the dev server.", files: ["index.html"] },
+      { id: "tests",      label: "tests/",       type: "test",       depth: 1, parent_id: "root",  has_children: false, description: "Jest + React Testing Library test suite.", files: ["App.test.js"] },
+      // src children
+      { id: "src__components", label: "components/", type: "module",   depth: 2, parent_id: "src", has_children: true,  description: "Reusable UI components — Header, Footer, Button, and shared layout elements.", files: ["Header.js","Footer.js","Button.js"] },
+      { id: "src__pages",      label: "pages/",      type: "module",   depth: 2, parent_id: "src", has_children: false, description: "Page-level components — Home and Dashboard, each composed of smaller components.", files: ["Home.js","Dashboard.js"] },
+      { id: "src__hooks",      label: "hooks/",      type: "module",   depth: 2, parent_id: "src", has_children: false, description: "Custom hooks — useFetch wraps the API service layer with loading and error state.", files: ["useFetch.js"] },
+      { id: "src__context",    label: "context/",    type: "module",   depth: 2, parent_id: "src", has_children: false, description: "React Context providers — AuthContext stores user session globally.", files: ["AuthContext.js"] },
+      { id: "src__services",   label: "services/",   type: "service",  depth: 2, parent_id: "src", has_children: false, description: "API service layer — wraps fetch calls, handles auth headers and error responses.", files: ["api.js"] },
+      // components children
+      { id: "src__components__Header", label: "Header.js", type: "module", depth: 3, parent_id: "src__components", has_children: false, description: "Top navigation bar — uses AuthContext to show login/logout state.", files: ["Header.js"] },
+      { id: "src__components__Footer", label: "Footer.js", type: "module", depth: 3, parent_id: "src__components", has_children: false, description: "Site footer with links.", files: ["Footer.js"] },
+      { id: "src__components__Button", label: "Button.js", type: "module", depth: 3, parent_id: "src__components", has_children: false, description: "Reusable button with variant and loading props.", files: ["Button.js"] },
+    ],
+    edges: [
+      { source: "root",     target: "src",           label: "",         edge_type: "contains" },
+      { source: "root",     target: "public",         label: "",         edge_type: "contains" },
+      { source: "root",     target: "tests",          label: "",         edge_type: "contains" },
+      { source: "src",      target: "src__components",label: "",         edge_type: "contains" },
+      { source: "src",      target: "src__pages",     label: "",         edge_type: "contains" },
+      { source: "src",      target: "src__hooks",     label: "",         edge_type: "contains" },
+      { source: "src",      target: "src__context",   label: "",         edge_type: "contains" },
+      { source: "src",      target: "src__services",  label: "",         edge_type: "contains" },
+      { source: "src__components", target: "src__components__Header", label: "", edge_type: "contains" },
+      { source: "src__components", target: "src__components__Footer", label: "", edge_type: "contains" },
+      { source: "src__components", target: "src__components__Button", label: "", edge_type: "contains" },
+      { source: "src__pages",   target: "src__components", label: "uses",    edge_type: "imports" },
+      { source: "src__pages",   target: "src__hooks",      label: "uses",    edge_type: "imports" },
+      { source: "src__hooks",   target: "src__services",   label: "calls",   edge_type: "imports" },
+      { source: "src__components__Header", target: "src__context", label: "reads", edge_type: "imports" },
+    ],
+  },
+};
+
+// ── State ──────────────────────────────────────────────────────────────────────
+const INITIAL_LIMIT = 10;
+let cy          = null;
+let allNodes    = [];
+let allEdges    = [];
+let expandedIds = new Set();
+let currentRepo = null;
+
+const TYPE_COLORS = {
+  entrypoint: '#58a6ff', module: '#3fb950', service: '#d2a8ff',
+  config: '#e3b341', external: '#f78166', database: '#79c0ff', test: '#56d364',
+};
+function tc(t) { return TYPE_COLORS[t?.toLowerCase()] || '#8b949e'; }
+
+function nodeLabel(n) {
+  if (!n.has_children) return n.label;
+  if (expandedIds.has(n.id)) {
+    const hidden = n._hiddenCount || 0;
+    return hidden > 0 ? `▼ ${n.label} (+${hidden})` : `▼ ${n.label}`;
+  }
+  return `▶ ${n.label}`;
+}
+
+function mkNode(n) {
+  return { data: {
+    id: n.id, label: n.label, displayLabel: nodeLabel(n),
+    type: n.type, description: n.description, files: n.files || [],
+    has_children: n.has_children, parent_id: n.parent_id, depth: n.depth,
+    color: tc(n.type), _hiddenCount: n._hiddenCount || 0, _hiddenOffset: n._hiddenOffset || 0,
+  }};
+}
+
+function mkEdge(e, i) {
+  return { data: {
+    id: `e_${e.source}_${e.target}_${i}`,
+    source: e.source, target: e.target,
+    label: e.edge_type === 'imports' ? (e.label || 'uses') : '',
+    edge_type: e.edge_type || 'contains',
+  }};
+}
+
+const CY_STYLE = [
+  { selector: 'node', style: {
+    'background-color': 'data(color)', 'label': 'data(displayLabel)',
+    'color': '#e6edf3', 'font-size': '11px', 'font-weight': '600',
+    'text-valign': 'center', 'text-halign': 'center',
+    'text-wrap': 'wrap', 'text-max-width': '110px',
+    'text-outline-color': 'data(color)', 'text-outline-width': '1px',
+    'shape': 'round-rectangle', 'width': 'label', 'height': 'label',
+    'padding': '12px', 'border-width': '2px', 'border-color': '#30363d',
+    'transition-property': 'border-color, opacity', 'transition-duration': '0.15s',
+  }},
+  { selector: 'node.expandable', style: { 'border-style': 'dashed', 'border-color': '#58a6ff44' }},
+  { selector: 'node.expanded',   style: { 'border-color': 'data(color)', 'border-width': '2.5px' }},
+  { selector: 'node.highlighted',style: { 'border-color': '#fff', 'border-width': '2.5px' }},
+  { selector: 'node.dimmed',     style: { 'opacity': '0.2' }},
+  { selector: 'edge[edge_type = "contains"]', style: {
+    'width': 1.5, 'line-color': '#2d333b', 'target-arrow-color': '#2d333b',
+    'target-arrow-shape': 'triangle', 'curve-style': 'bezier',
+    'line-style': 'dashed', 'opacity': '0.6',
+  }},
+  { selector: 'edge[edge_type = "imports"]', style: {
+    'width': 2, 'line-color': '#58a6ff', 'target-arrow-color': '#58a6ff',
+    'target-arrow-shape': 'triangle', 'curve-style': 'bezier',
+    'label': 'data(label)', 'font-size': '9px', 'color': '#8b949e',
+    'text-background-color': '#0d1117', 'text-background-opacity': 1,
+    'text-background-padding': '2px', 'edge-text-rotation': 'autorotate', 'opacity': '0.85',
+  }},
+  { selector: 'edge.dimmed', style: { 'opacity': '0.04' }},
+];
+
+const LAYOUT = { name: 'dagre', rankDir: 'TB', rankSep: 80, nodeSep: 55, animate: true, animationDuration: 350, padding: 50 };
+
+function reLayout(fit = false) {
+  cy.layout({ ...LAYOUT, fit }).run();
+  updateCount();
+}
+
+function updateCount() {
+  const total = allNodes.length;
+  const shown = cy.nodes().length;
+  document.getElementById('nodeCount').textContent = `${shown} / ${total} nodes`;
+}
+
+function getDescendants(id) {
+  const res = [], q = [id];
+  while (q.length) {
+    const cur = q.shift();
+    const ch  = allNodes.filter(n => n.parent_id === cur);
+    ch.forEach(c => { res.push(c.id); q.push(c.id); });
+  }
+  return res;
+}
+
+function expandNode(nodeId) {
+  expandedIds.add(nodeId);
+  const children  = allNodes.filter(n => n.parent_id === nodeId);
+  const shown     = children.slice(0, INITIAL_LIMIT);
+  const hidden    = children.length - shown.length;
+
+  // Annotate node with hidden count
+  shown.forEach(n => { n._hiddenCount = 0; n._hiddenOffset = 0; });
+  const parentData = allNodes.find(n => n.id === nodeId);
+  if (parentData) { parentData._hiddenCount = hidden; parentData._hiddenOffset = shown.length; }
+
+  cy.add(shown.map(n => mkNode(n)));
+
+  const visIds = new Set(cy.nodes().map(n => n.id()));
+  allEdges.forEach((e, i) => {
+    const eid = `e_${e.source}_${e.target}_${i}`;
+    if (visIds.has(e.source) && visIds.has(e.target) && !cy.getElementById(eid).length)
+      cy.add(mkEdge(e, i));
+  });
+
+  const pn = cy.getElementById(nodeId);
+  const pd = allNodes.find(n => n.id === nodeId);
+  pn.data('displayLabel', nodeLabel(pd));
+  pn.data('_hiddenCount', hidden);
+  pn.data('_hiddenOffset', shown.length);
+  pn.addClass('expanded').removeClass('expandable');
+  shown.forEach(c => { if (c.has_children) cy.getElementById(c.id).addClass('expandable'); });
+  reLayout(false);
+}
+
+function loadMore(nodeId) {
+  const pn     = cy.getElementById(nodeId);
+  const offset = pn.data('_hiddenOffset') || 0;
+  const children = allNodes.filter(n => n.parent_id === nodeId);
+  const batch  = children.slice(offset, offset + INITIAL_LIMIT);
+  const remaining = children.length - offset - batch.length;
+
+  cy.add(batch.map(n => mkNode(n)));
+  const visIds = new Set(cy.nodes().map(n => n.id()));
+  allEdges.forEach((e, i) => {
+    const eid = `e_${e.source}_${e.target}_${i}`;
+    if (visIds.has(e.source) && visIds.has(e.target) && !cy.getElementById(eid).length)
+      cy.add(mkEdge(e, i));
+  });
+
+  pn.data('_hiddenOffset', offset + batch.length);
+  pn.data('_hiddenCount', remaining);
+  const pd = allNodes.find(n => n.id === nodeId);
+  if (pd) { pd._hiddenCount = remaining; pd._hiddenOffset = offset + batch.length; }
+  pn.data('displayLabel', nodeLabel({ ...pn.data(), _hiddenCount: remaining }));
+  batch.forEach(c => { if (c.has_children) cy.getElementById(c.id).addClass('expandable'); });
+  reLayout(false);
+}
+
+function collapseNode(nodeId) {
+  expandedIds.delete(nodeId);
+  getDescendants(nodeId).forEach(id => { expandedIds.delete(id); cy.getElementById(id).remove(); });
+  cy.edges().forEach(e => {
+    if (!cy.getElementById(e.data('source')).length || !cy.getElementById(e.data('target')).length)
+      e.remove();
+  });
+  const pd = allNodes.find(n => n.id === nodeId);
+  if (pd) { pd._hiddenCount = 0; pd._hiddenOffset = 0; }
+  cy.getElementById(nodeId).data('displayLabel', `▶ ${cy.getElementById(nodeId).data('label')}`);
+  cy.getElementById(nodeId).removeClass('expanded').addClass('expandable');
+  reLayout(false);
+}
+
+function showDetail(d) {
+  document.getElementById('nLabel').textContent = d.label;
+  document.getElementById('nDesc').textContent  = d.description || '';
+  document.getElementById('nFiles').innerHTML   = (d.files||[]).map(f=>`<span>📄 ${f}</span>`).join('');
+  const b = document.getElementById('nBadge');
+  b.textContent = d.type || 'module';
+  b.style.cssText = `background:${tc(d.type)}22;color:${tc(d.type)};border:1px solid ${tc(d.type)}55`;
+  document.getElementById('nodePanel').classList.add('visible');
+  document.getElementById('clickHint').style.display = 'none';
+}
+
+// ── View switcher ─────────────────────────────────────────────
+let activeView = 'interactive';
+
+function switchView(mode) {
+  activeView = mode;
+  document.getElementById('tabInteractive').classList.toggle('active',  mode === 'interactive');
+  document.getElementById('tabWalkthrough').classList.toggle('active',  mode === 'walkthrough');
+  document.getElementById('cy').style.display              = mode === 'interactive' ? '' : 'none';
+  document.getElementById('hint').style.display            = mode === 'interactive' ? '' : 'none';
+  document.getElementById('legend').style.display          = mode === 'interactive' ? '' : 'none';
+  document.getElementById('walkthroughPanel').style.display= mode === 'walkthrough' ? '' : 'none';
+  if (mode === 'walkthrough' && currentRepo) renderWalkthrough(currentRepo);
+}
+
+const LAYER_DEFS = [
+  { icon: '🚀', label: 'Entry Points',         types: ['entrypoint'] },
+  { icon: '⚙️', label: 'Services & APIs',      types: ['service'] },
+  { icon: '📦', label: 'Modules',               types: ['module'] },
+  { icon: '🗄️', label: 'Data & Storage',       types: ['database'] },
+  { icon: '🔧', label: 'Configuration',         types: ['config'] },
+  { icon: '🔌', label: 'External Dependencies', types: ['external'] },
+  { icon: '🧪', label: 'Tests',                 types: ['test'] },
+  { icon: '📄', label: 'Other',                 types: [] },
+];
+
+function renderWalkthrough(data) {
+  const nodes = data.nodes || [];
+  const edges = data.edges || [];
+  const nodeById = Object.fromEntries(nodes.map(n => [n.id, n]));
+
+  // Build dep map: id → [target labels]
+  const depsOf = {};
+  for (const e of edges) {
+    if (e.edge_type === 'imports') {
+      if (!depsOf[e.source]) depsOf[e.source] = [];
+      depsOf[e.source].push(e.target);
+    }
+  }
+
+  const placed = new Set();
+  const layers = [];
+  for (const def of LAYER_DEFS) {
+    const group = nodes.filter(n => {
+      if (placed.has(n.id)) return false;
+      if (def.types.length === 0) return true;
+      return def.types.includes(n.type?.toLowerCase());
+    });
+    if (!group.length) continue;
+    group.forEach(n => placed.add(n.id));
+    layers.push({ ...def, nodes: group });
+  }
+
+  let html = '';
+  for (let li = 0; li < layers.length; li++) {
+    const layer = layers[li];
+    html += `<div class="wt-layer">`;
+    html += `<div class="wt-layer-header"><span>${layer.icon}</span>${layer.label}</div>`;
+    html += `<div class="wt-cards">`;
+
+    for (const n of layer.nodes) {
+      const color = TYPE_COLORS[n.type?.toLowerCase()] || '#8b949e';
+      const depIds   = depsOf[n.id] || [];
+      const depNames = depIds.map(id => nodeById[id]?.label || id);
+      const filesStr = (n.files || []).slice(0, 4).map(f => `📄 ${f.split('/').pop()}`).join('  ');
+      const depsHtml = depNames.length
+        ? `<div class="wt-deps"><span class="wt-dep-label">→ uses</span>${depNames.map(d=>`<span class="wt-dep-chip">${d}</span>`).join('')}</div>`
+        : '';
+      html += `
+        <div class="wt-card" style="border-left-color:${color}"
+             onclick="switchView('interactive')">
+          <div class="wt-card-top">
+            <span class="wt-card-name">${n.label}</span>
+            <span class="wt-card-badge" style="background:${color}22;color:${color}">${n.type||'module'}</span>
+          </div>
+          <p class="wt-card-desc">${n.description || ''}</p>
+          ${filesStr ? `<div class="wt-card-files">${filesStr}</div>` : ''}
+          ${depsHtml}
+        </div>`;
+    }
+
+    html += `</div></div>`;
+    if (li < layers.length - 1) {
+      html += `<div class="wt-connector"><div class="wt-connector-line"></div><span class="wt-connector-arrow">↓</span><div class="wt-connector-line"></div></div>`;
+    }
+  }
+
+  document.getElementById('walkthroughContent').innerHTML = html;
+}
+
+function loadRepo(key, event) {
+  currentRepo = REPOS[key];
+  allNodes    = JSON.parse(JSON.stringify(currentRepo.nodes));
+  allEdges    = JSON.parse(JSON.stringify(currentRepo.edges));
+  expandedIds = new Set();
+
+  // Update sidebar
+  document.getElementById('summaryText').textContent = currentRepo.summary;
+  const chips = document.getElementById('techChips');
+  chips.innerHTML = '';
+  currentRepo.tech_stack.forEach(t => {
+    const c = document.createElement('span');
+    c.className = 'tech-chip'; c.textContent = t; chips.appendChild(c);
+  });
+  document.getElementById('treePanel').textContent = currentRepo.tree;
+  document.getElementById('nodePanel').classList.remove('visible');
+  document.getElementById('clickHint').style.display = '';
+
+  // Toolbar pills
+  document.querySelectorAll('.repo-pill').forEach(p => p.classList.remove('active'));
+  if (event) event.target.classList.add('active');
+
+  // Initial render: root + ALL depth-1 nodes; depth 2+ only on explicit click
+  const root   = allNodes.find(n => n.depth === 0);
+  const depth1 = allNodes.filter(n => n.depth === 1);
+
+  if (root) expandedIds.add(root.id);
+  depth1.forEach(n => { if (n.has_children) expandedIds.add(n.id); });
+
+  const initNodes = [root, ...depth1].filter(Boolean);
+  const initIds   = new Set(initNodes.map(n => n.id));
+  const initEdges = allEdges.filter(e => initIds.has(e.source) && initIds.has(e.target));
+
+  if (cy) cy.destroy();
+
+  cy = cytoscape({
+    container: document.getElementById('cy'),
+    elements: [
+      ...initNodes.map(n => mkNode(n)),
+      ...initEdges.map((e, i) => mkEdge(e, i)),
+    ],
+    style: CY_STYLE,
+    layout: { ...LAYOUT, fit: true },
+    userZoomingEnabled: true, userPanningEnabled: true, boxSelectionEnabled: false,
+  });
+
+  cy.nodes().forEach(n => {
+    const d = n.data();
+    if (d.has_children && !expandedIds.has(d.id)) n.addClass('expandable');
+    if (expandedIds.has(d.id)) n.addClass('expanded');
+  });
+
+  setTimeout(() => { const h = document.getElementById('hint'); if (h) h.style.opacity='0'; }, 5000);
+
+  cy.on('tap', 'node', function(evt) {
+    const node = evt.target, d = node.data();
+    cy.elements().removeClass('highlighted dimmed');
+    const nbhd = node.closedNeighborhood();
+    cy.elements().not(nbhd).addClass('dimmed');
+    nbhd.addClass('highlighted');
+    showDetail(d);
+
+    if (d.has_children) {
+      if (expandedIds.has(d.id)) {
+        if ((d._hiddenCount || 0) > 0) loadMore(d.id);
+        else collapseNode(d.id);
+      } else {
+        expandNode(d.id);
+      }
+    }
+  });
+
+  cy.on('tap', function(evt) {
+    if (evt.target === cy) {
+      cy.elements().removeClass('highlighted dimmed');
+      document.getElementById('nodePanel').classList.remove('visible');
+      document.getElementById('clickHint').style.display = '';
+    }
+  });
+
+  updateCount();
+
+  // If walkthrough view is active, re-render it for the new repo
+  if (activeView === 'walkthrough') renderWalkthrough(currentRepo);
+}
+
+// Load default on start
+window.addEventListener('load', () => loadRepo('gitmap'));
+</script>
+</body>
+</html>
