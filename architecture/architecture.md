@@ -51,9 +51,16 @@ C4Context
 
 ## Container Diagram
 
-The container diagram zooms into GitMap and shows five containers. The **Frontend** is a single HTML file served by the backend — no separate build step. The **FastAPI Backend** orchestrates everything: it checks the SQLite cache first, calls the GitHub Fetcher if needed, then passes the result to the AI Analyzer. The **GitHub Fetcher** and **AI Analyzer** are separate Python modules with distinct external dependencies (GitHub vs OpenAI), kept separate so each teammate owns one cleanly. The **SQLite Cache** stores every completed analysis so repeat lookups never re-call GitHub or OpenAI.
+The container diagram zooms into GitMap and shows four containers. The Frontend is a single HTML file served by the backend — no separate build step. This simplifies deployment, with the trade-off of reduced flexibility for larger-scale frontends.
 
-Data flows in one direction: user → frontend → backend → (cache hit? return immediately) → fetcher → analyzer → cache → response.
+The FastAPI Backend orchestrates everything: it checks the SQLite cache first, calls the Analysis Pipeline if needed, then returns the result. The Analysis Pipeline combines the GitHub Fetcher and AI Analyzer as logical modules with distinct responsibilities and external dependencies (GitHub vs OpenAI), while remaining part of the same runtime container for simplicity.
+
+The GitHub Fetcher and AI Analyzer are separate Python modules with distinct external dependencies (GitHub vs OpenAI), kept separate so each teammate owns one cleanly. The fetcher retrieves prioritized repository files, and the analyzer sends structured input to the OpenAI API and returns JSON describing the repository structure. This design balances analysis accuracy with API token cost.
+
+The SQLite Cache stores every completed analysis so repeat lookups never re-call GitHub or OpenAI. This improves performance and reduces cost, with the trade-off of limited scalability due to its local design.
+
+Data flows in one direction: user → frontend → backend → (cache hit? return immediately) → pipeline → cache → response. This linear flow simplifies reasoning about the system and avoids cyclic dependencies.
+
 
 ```mermaid
 C4Container
