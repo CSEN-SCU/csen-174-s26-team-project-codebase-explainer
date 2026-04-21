@@ -4,94 +4,178 @@ function sample(arr, n) {
   return [...arr].sort(() => Math.random() - 0.5).slice(0, n);
 }
 
+/** Trim + collapse spaces + lowercase — labels and tech names. */
+function normLabel(s) {
+  return String(s ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+/**
+ * Scoring runs in the browser only. Quiz uses node/edge labels from the graph JSON.
+ */
+function isAnswerCorrect(q, chosen) {
+  if (chosen == null || chosen === "") return false;
+  return normLabel(chosen) === normLabel(q.answer);
+}
+
+/** Up to 4 unique labels + correct, shuffled. Returns null if not enough distractors. */
+function buildMcqOptions(correct, pool) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of [correct, ...pool]) {
+    const s = String(raw);
+    const k = normLabel(s);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(s);
+    if (out.length >= 8) break;
+  }
+  const opts = sample(out, Math.min(4, out.length));
+  return opts.length >= 2 ? opts : null;
+}
+
+/**
+ * Only `nodes` and `edges` (no tech stack, no per-node file lists). Each question is built so
+ * exactly one option matches the graph fact described.
+ */
 function buildQuestions(analysis) {
   const nodes = analysis.nodes || [];
   const edges = analysis.edges || [];
-  if (!nodes.length) return [];
+  if (nodes.length < 2) return [];
+  if (!edges.length) return [];
 
-  const questions = [];
-  const labels = nodes.map((n) => n.label);
+  const idTo = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const lab = (id) => idTo[id]?.label || String(id);
 
-  const byType = {};
+  const goodEdges = edges.filter(
+    (e) => e && e.source !== e.target && idTo[e.source] && idTo[e.target]
+  );
+  if (!goodEdges.length) return [];
+
+  const pool = [];
+
+  for (const n of nodes) {
+    const outE = edges.filter((e) => e && e.source === n.id && e.target !== e.source);
+    if (outE.length !== 1) continue;
+    const e = outE[0];
+    const tgt = lab(e.target);
+    const srcL = lab(n.id);
+    const distr = sample(
+      nodes.filter((x) => normLabel(x.label) !== normLabel(tgt)).map((x) => x.label),
+      14
+    );
+    const options = buildMcqOptions(tgt, distr);
+    if (!options) continue;
+    pool.push({
+      id: `g-out1-${n.id}`,
+      question: `In this graph, "${srcL}" has exactly one outgoing edge. Which node does it point to?`,
+      options,
+      answer: tgt,
+      explanation: `The only edge from ${srcL} goes to ${tgt} (“${e.label || "link"}”).`,
+    });
+  }
+
+  for (const n of nodes) {
+    const inE = edges.filter((e) => e && e.target === n.id && e.source !== e.target);
+    if (inE.length !== 1) continue;
+    const e = inE[0];
+    const src = lab(e.source);
+    const tgtL = lab(n.id);
+    const distr = sample(
+      nodes.filter((x) => normLabel(x.label) !== normLabel(src)).map((x) => x.label),
+      14
+    );
+    const options = buildMcqOptions(src, distr);
+    if (!options) continue;
+    pool.push({
+      id: `g-in1-${n.id}`,
+      question: `In this graph, exactly one node links into "${tgtL}". Which node is that?`,
+      options,
+      answer: src,
+      explanation: `Only ${src} → ${tgtL} (“${e.label || "link"}”).`,
+    });
+  }
+
+  const outCounts = nodes.map((n) => ({
+    n,
+    c: edges.filter((e) => e && e.source === n.id).length,
+  }));
+  const maxOut = Math.max(...outCounts.map((x) => x.c), 0);
+  if (maxOut > 0) {
+    const leaders = outCounts.filter((x) => x.c === maxOut).map((x) => x.n);
+    if (leaders.length === 1) {
+      const w = leaders[0];
+      const distr = sample(
+        nodes.filter((x) => normLabel(x.label) !== normLabel(w.label)).map((x) => x.label),
+        14
+      );
+      const options = buildMcqOptions(w.label, distr);
+      if (options) {
+        pool.push({
+          id: `g-outdeg-${w.id}`,
+          question: `Which node has the most outgoing edges (${maxOut}) in this graph?`,
+          options,
+          answer: w.label,
+          explanation: `${w.label} is the only node with the highest out-degree (${maxOut}).`,
+        });
+      }
+    }
+  }
+
+  const typeGroups = {};
   for (const n of nodes) {
     const t = String(n.type || "module").toLowerCase();
-    byType[t] = byType[t] || [];
-    byType[t].push(n);
+    typeGroups[t] = typeGroups[t] || [];
+    typeGroups[t].push(n);
   }
-
-  const types = Object.keys(byType).filter((t) => byType[t].length > 0);
-  if (types.length >= 2) {
-    const targetType = types.sort((a, b) => byType[b].length - byType[a].length)[0];
-    const correctNode = byType[targetType][0];
-    const distractors = sample(nodes.filter((n) => n.id !== correctNode.id), 3).map((n) => n.label);
-    questions.push({
-      id: "q-type",
-      question: `Which component is classified as a "${targetType}" node?`,
-      options: sample([correctNode.label, ...distractors], 4),
-      answer: correctNode.label,
-      explanation: `${correctNode.label} was tagged as ${targetType} by the architecture analysis.`,
-    });
-  }
-
-  if (edges.length > 0) {
-    const e = edges[0];
-    const src = nodes.find((n) => n.id === e.source)?.label || e.source;
-    const tgt = nodes.find((n) => n.id === e.target)?.label || e.target;
-    const wrongs = sample(nodes.filter((n) => n.label !== tgt), 3).map((n) => n.label);
-    questions.push({
-      id: "q-edge",
-      question: `According to the graph, ${src} has a "${e.label}" relationship with which component?`,
-      options: sample([tgt, ...wrongs], 4),
-      answer: tgt,
-      explanation: `The edge ${src} -> ${tgt} is labeled "${e.label}".`,
-    });
-  }
-
-  if (analysis.tech_stack?.length) {
-    const correct = analysis.tech_stack[0];
-    const extras = ["Django", "Redis", "TensorFlow", "Kubernetes", "Laravel", "Spring Boot"];
-    const wrong = sample(extras.filter((x) => x !== correct), 3);
-    questions.push({
-      id: "q-stack",
-      question: "Which technology is identified in this repository's tech stack?",
-      options: sample([correct, ...wrong], 4),
-      answer: correct,
-      explanation: `${correct} appears in the generated tech stack summary.`,
-    });
-  }
-
-  const withFiles = nodes.find((n) => (n.files || []).length > 0);
-  if (withFiles) {
-    const correctFile = withFiles.files[0];
-    const wrongFiles = sample(
-      nodes
-        .flatMap((n) => n.files || [])
-        .filter((f) => f !== correctFile),
-      3
+  for (const [t, arr] of Object.entries(typeGroups)) {
+    if (arr.length !== 1) continue;
+    const sole = arr[0];
+    const distr = sample(
+      nodes.filter((x) => normLabel(x.label) !== normLabel(sole.label)).map((x) => x.label),
+      14
     );
-    questions.push({
-      id: "q-file",
-      question: `Which file is grouped under "${withFiles.label}"?`,
-      options: sample([correctFile, ...wrongFiles], 4),
-      answer: correctFile,
-      explanation: `"${withFiles.label}" includes ${correctFile} in its mapped file list.`,
+    const options = buildMcqOptions(sole.label, distr);
+    if (!options) continue;
+    pool.push({
+      id: `g-type1-${sole.id}`,
+      question: `Only one node has type “${t}” in this graph. Which label is it?`,
+      options,
+      answer: sole.label,
+      explanation: `${sole.label} is the only node tagged “${t}”.`,
     });
   }
 
-  if (labels.length >= 4) {
-    const target = nodes.sort((a, b) => (b.files?.length || 0) - (a.files?.length || 0))[0];
-    const count = target.files?.length || 0;
-    const wrongLabels = sample(labels.filter((l) => l !== target.label), 3);
-    questions.push({
-      id: "q-size",
-      question: `Which node appears to cover the broadest file group (${count} files)?`,
-      options: sample([target.label, ...wrongLabels], 4),
-      answer: target.label,
-      explanation: `${target.label} has ${count} mapped files in this analysis.`,
+  const edgeSample = sample(goodEdges, Math.min(4, goodEdges.length));
+  for (let ei = 0; ei < edgeSample.length; ei++) {
+    const e = edgeSample[ei];
+    const srcL = lab(e.source);
+    const tgtL = lab(e.target);
+    const distr = sample(
+      nodes.filter((x) => normLabel(x.label) !== normLabel(tgtL)).map((x) => x.label),
+      14
+    );
+    const options = buildMcqOptions(tgtL, distr);
+    if (!options) continue;
+    pool.push({
+      id: `g-edge-${e.source}-${e.target}-${ei}`,
+      question: `In the graph, “${srcL}” has an edge labeled “${e.label || "link"}” into which node?`,
+      options,
+      answer: tgtL,
+      explanation: `Edge: ${srcL} —[${e.label || "link"}]→ ${tgtL}.`,
     });
   }
 
-  return questions.slice(0, 5);
+  const seen = new Set();
+  const uniq = [];
+  for (const q of pool) {
+    if (seen.has(q.id)) continue;
+    seen.add(q.id);
+    uniq.push(q);
+  }
+  return sample(uniq, Math.min(5, uniq.length));
 }
 
 export default function QuizPanel({ analysis }) {
@@ -103,7 +187,10 @@ export default function QuizPanel({ analysis }) {
   const current = questions[step];
   const total = questions.length;
   const answered = Object.keys(picked).length;
-  const score = questions.reduce((acc, q) => (picked[q.id] === q.answer ? acc + 1 : acc), 0);
+  const score = questions.reduce(
+    (acc, q) => acc + (isAnswerCorrect(q, picked[q.id]) ? 1 : 0),
+    0
+  );
 
   if (!questions.length) {
     return (
@@ -115,7 +202,8 @@ export default function QuizPanel({ analysis }) {
           background: "rgba(255,252,247,0.94)",
         }}
       >
-        No quiz questions available for this analysis.
+        This graph is too small for the quiz (need at least two nodes and one edge), or none of
+        the graph-only question patterns matched. Try re-analyzing a larger repo.
       </section>
     );
   }
@@ -125,7 +213,7 @@ export default function QuizPanel({ analysis }) {
     ? questions.map((q) => ({
         ...q,
         chosen: picked[q.id] ?? "(no answer)",
-        correct: picked[q.id] === q.answer,
+        correct: isAnswerCorrect(q, picked[q.id]),
       }))
     : [];
 
@@ -152,20 +240,25 @@ export default function QuizPanel({ analysis }) {
         <div style={{ fontSize: "0.82rem", color: "var(--ink-soft)" }}>
           Question {step + 1} / {total} · Answered {answered} · Score {score}
         </div>
+        <div style={{ fontSize: "0.74rem", color: "var(--ink-soft)", marginTop: "0.35rem" }}>
+          Each question uses only the graph (nodes + edges). Exactly one choice is correct;
+          grading is automatic in the browser (not the chat AI).
+        </div>
       </div>
 
       <div style={{ padding: "1rem" }}>
         <h3 style={{ margin: "0 0 0.8rem", fontFamily: "var(--font-display)" }}>{current.question}</h3>
 
         <div style={{ display: "grid", gap: "0.5rem" }}>
-          {current.options.map((opt) => {
+          {current.options.map((opt, i) => {
             const isChosen = picked[current.id] === opt;
-            const isCorrect = current.answer === opt;
-            const showCorrect = reveal && isCorrect;
-            const showWrongChosen = reveal && isChosen && !isCorrect;
+            const isCorrectOption = isAnswerCorrect(current, opt);
+            const showCorrect = reveal && isCorrectOption;
+            const showWrongChosen =
+              reveal && isChosen && !isAnswerCorrect(current, picked[current.id]);
             return (
               <button
-                key={opt}
+                key={`${current.id}-${i}`}
                 type="button"
                 onClick={() => setPicked((prev) => ({ ...prev, [current.id]: opt }))}
                 disabled={submitted}

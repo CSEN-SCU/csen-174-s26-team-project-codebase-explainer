@@ -8,13 +8,32 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Any
+from google import genai
+from google.genai import types
 
-import google.generativeai as genai
+# Default model id (AI Studio; override with GEMINI_MODEL). Matches current Gemini API samples.
+DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
+
+# Chat: enough room for a few complete sentences before optional sentence-boundary trim.
+_DEFAULT_CHAT_MAX_OUT = 1024
 
 
 def skip_gemini_enabled() -> bool:
     return os.getenv("GITMAP_SKIP_GEMINI", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def analysis_is_heuristic_preview(graph: dict) -> bool:
+    """Detect tree-only / mock analyses (including rows saved before we persisted `source`)."""
+    s = (graph.get("summary") or "")
+    if "Heuristic preview only" in s:
+        return True
+    for node in graph.get("nodes") or []:
+        if not isinstance(node, dict):
+            continue
+        desc = (node.get("description") or "").lower()
+        if "mock mode" in desc:
+            return True
+    return False
 
 
 def _slug_id(name: str, used: set[str]) -> str:
@@ -100,7 +119,7 @@ def mock_analysis_from_tree(repo_data: dict) -> dict:
             "id": "root",
             "label": f"{repo} (root)",
             "type": "entrypoint",
-            "description": f"Top-level files in {owner}/{repo} (mock mode — folder layout only).",
+            "description": f"Top-level files in {owner}/{repo} (folder layout preview).",
             "files": sorted(root_files)[:30],
         }
     )
@@ -121,10 +140,9 @@ def mock_analysis_from_tree(repo_data: dict) -> dict:
         edges.append({"source": "root", "target": nid, "label": "contains"})
 
     summary = (
-        f"Heuristic preview only (Gemini off): {owner}/{repo} has {n} tracked file(s) "
-        f"in {len(top_names)} top-level folder group(s). "
-        "Nodes mirror the repo tree, not inferred architecture. "
-        "Unset GITMAP_SKIP_GEMINI and set GEMINI_API_KEY for AI analysis and chat."
+        f"Heuristic preview only: {owner}/{repo} has {n} tracked file(s) in "
+        f"{len(top_names)} top-level folder group(s). "
+        "This graph mirrors the repo tree only, not inferred architecture."
     )
 
     return {
@@ -177,34 +195,26 @@ File contents:
 """
 
 
-def _configure() -> None:
-    key = os.getenv("GEMINI_API_KEY")
+def _chat_max_output_tokens() -> int:
+    """Upper bound on raw model output before sentence trim (tokens ≈ words for English)."""
+    raw = os.getenv("GEMINI_CHAT_MAX_OUTPUT_TOKENS", "").strip()
+    if raw.isdigit():
+        return max(400, min(4096, int(raw)))
+    return _DEFAULT_CHAT_MAX_OUT
+
+
+def _require_genai_api_key() -> None:
+    """Same resolution as google-genai Client(): GOOGLE_API_KEY, else GEMINI_API_KEY."""
+    key = (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or "").strip()
     if not key:
-        raise ValueError("GEMINI_API_KEY is not set")
-    genai.configure(api_key=key)
+        raise ValueError(
+            "No API key in the environment. Set GEMINI_API_KEY (or GOOGLE_API_KEY), "
+            "same as the official Gemini samples."
+        )
 
 
-def _model_json() -> Any:
-    _configure()
-    name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-    return genai.GenerativeModel(
-        name,
-        system_instruction=SYSTEM_ANALYSIS,
-        generation_config=genai.GenerationConfig(
-            temperature=0.2,
-            response_mime_type="application/json",
-        ),
-    )
-
-
-def _model_chat() -> Any:
-    _configure()
-    name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-    return genai.GenerativeModel(
-        name,
-        system_instruction=CHAT_SYSTEM,
-        generation_config=genai.GenerationConfig(temperature=0.35),
-    )
+def _gemini_model_id() -> str:
+    return os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL)
 
 
 def build_analysis_prompt(repo_data: dict) -> str:
@@ -241,9 +251,18 @@ async def analyze_repo(repo_data: dict) -> dict:
         return mock_analysis_from_tree(repo_data)
 
     prompt = build_analysis_prompt(repo_data)
-    model = _model_json()
+    _require_genai_api_key()
     try:
-        response = await model.generate_content_async(prompt)
+        async with genai.Client().aio as aclient:
+            response = await aclient.models.generate_content(
+                model=_gemini_model_id(),
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_ANALYSIS,
+                    temperature=0.2,
+                    response_mime_type="application/json",
+                ),
+            )
     except Exception as e:
         raise ValueError(f"Gemini API error: {type(e).__name__}: {e}") from e
 
@@ -255,9 +274,115 @@ async def analyze_repo(repo_data: dict) -> dict:
     return data
 
 
-CHAT_SYSTEM = """You are a helpful assistant explaining a software repository architecture.
-Answer using only the provided summary, tech stack, graph nodes/edges, and the user's question.
-If you are unsure, say what is unknown. Be concise."""
+def build_chat_code_context(file_tree: list[str], files: dict[str, str]) -> dict:
+    """
+    Pack a bounded file tree sample plus code excerpts for chat.
+    Shrinks until the JSON is under a safe size for the model context.
+    """
+    paths = sorted(set(file_tree or []))
+    ft_sample = paths[:450]
+    keys = sorted((files or {}).keys())
+    per_file_cap = 5_500
+    max_files = 36
+    excerpts: dict[str, str] = {}
+    for k in keys[:max_files]:
+        body = (files or {}).get(k) or ""
+        if len(body) > per_file_cap:
+            body = body[:per_file_cap] + "\n... [truncated]"
+        excerpts[k] = body
+
+    payload: dict = {
+        "file_tree_sample": ft_sample,
+        "code_excerpts": excerpts,
+        "note": "code_excerpts are partial GitHub file contents; file_tree_sample is a path subset.",
+    }
+    raw = json.dumps(payload, indent=2)
+    while len(raw) > 95_000 and len(excerpts) > 10:
+        drop = max(excerpts, key=lambda p: len(excerpts[p]))
+        del excerpts[drop]
+        payload["code_excerpts"] = dict(excerpts)
+        raw = json.dumps(payload, indent=2)
+    while len(raw) > 95_000 and len(ft_sample) > 120:
+        ft_sample = ft_sample[:-80]
+        payload["file_tree_sample"] = ft_sample
+        raw = json.dumps(payload, indent=2)
+    return payload
+
+
+CHAT_SYSTEM = """You are the Q&A layer for a single repository. The user sends JSON that may include:
+
+- summary, tech_stack, nodes, edges: architecture snapshot (how pieces relate).
+- file_tree_sample: a subset of repo paths.
+- code_excerpts: path → partial file text from GitHub (what the code actually does in those files).
+
+Evidence rules:
+- Use code_excerpts to infer behavior, imports, frameworks, and what major folders do. Use nodes/edges to relate components. Use file_tree_sample to see layout when excerpts are thin.
+- Still do not invent files or behavior that are nowhere in the JSON. If excerpts do not cover an area, say what is missing instead of guessing from general knowledge.
+- Read the question literally. The first sentence must directly answer it.
+
+Presentation (plain-text chat bubble; not Markdown):
+- Write two or three complete sentences (each should end with proper punctuation). The first sentence must answer the question; the others may add brief supporting detail or note what the snapshot does not show—then stop.
+- Do not cut off mid-thought: finish each sentence you start.
+- No lists, no numbered lines, no headings. No **bold**; at most one short `path` in backticks if essential.
+- No lines starting with * or -."""
+
+
+def _flatten_md_double_asterisk(text: str) -> str:
+    """Remove `**bold**` wrappers — models often emit Markdown even when asked not to."""
+    if not text:
+        return text
+    prev = None
+    while prev != text:
+        prev = text
+        text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    return text
+
+
+def _compact_graph_for_chat(
+    nodes: list[dict],
+    edges: list[dict],
+    *,
+    max_files_per_node: int = 12,
+) -> tuple[list[dict], list[dict]]:
+    """Trim long per-node file lists so chat context emphasizes roles and relationships."""
+    out_nodes: list[dict] = []
+    for n in nodes or []:
+        if not isinstance(n, dict):
+            continue
+        slim = {k: v for k, v in n.items() if k != "files"}
+        files = n.get("files")
+        if isinstance(files, list) and files:
+            slim["files"] = files[:max_files_per_node]
+            rest = len(files) - max_files_per_node
+            if rest > 0:
+                slim["files_truncated"] = rest
+        out_nodes.append(slim)
+    return out_nodes, [e for e in (edges or []) if isinstance(e, dict)]
+
+
+def _format_chat_for_plain_ui(text: str) -> str:
+    """Strip Markdown bold; turn line-leading bullets into plain arrows for plain-text bubbles."""
+    text = _flatten_md_double_asterisk(text)
+    # Lines that look like Markdown / unicode bullets → single visible prefix
+    text = re.sub(r"(?m)^\s*[-*•]\s+", "→ ", text)
+    return text.strip()
+
+
+def _truncate_chat_to_sentences(text: str, max_sentences: int = 3) -> str:
+    """If the model returns a long essay, keep only the first few sentence-sized segments (split on . ? !)."""
+    t = (text or "").strip()
+    if not t or max_sentences <= 0:
+        return t
+    parts = re.split(r"(?<=[.!?])\s+", t)
+    parts = [p.strip() for p in parts if p.strip()]
+    if not parts:
+        return t
+    # Single unpunctuated paragraph: do not chop mid-sentence—return as-is so one thought can finish.
+    if len(parts) == 1:
+        return parts[0]
+    if len(parts) <= max_sentences:
+        return " ".join(parts)
+    return " ".join(parts[:max_sentences]).strip()
 
 
 async def chat_about_repo(
@@ -266,6 +391,8 @@ async def chat_about_repo(
     tech_stack: list[str],
     nodes: list[dict],
     edges: list[dict],
+    *,
+    code_context: dict | None = None,
 ) -> str:
     if skip_gemini_enabled():
         return (
@@ -274,19 +401,44 @@ async def chat_about_repo(
             "The graph is still a real folder-structure preview from GitHub."
         )
 
-    context = {
+    chat_nodes, chat_edges = _compact_graph_for_chat(nodes, edges)
+    context: dict = {
         "summary": summary,
         "tech_stack": tech_stack,
-        "nodes": nodes,
-        "edges": edges,
+        "nodes": chat_nodes,
+        "edges": chat_edges,
     }
-    payload = json.dumps(context, indent=2)[:120_000]
-    prompt = f"""Repository context (JSON):\n{payload}\n\nUser question:\n{user_message}"""
+    if code_context:
+        if code_context.get("file_tree_sample"):
+            context["file_tree_sample"] = code_context["file_tree_sample"]
+        if code_context.get("code_excerpts"):
+            context["code_excerpts"] = code_context["code_excerpts"]
+        if code_context.get("note"):
+            context["note"] = code_context["note"]
 
-    model = _model_chat()
+    payload = json.dumps(context, indent=2)[:200_000]
+    prompt = (
+        "Repository evidence (JSON). Use architecture fields plus code_excerpts to describe what the code does.\n\n"
+        f"{payload}\n\n"
+        f"Question:\n{user_message}\n\n"
+        "Answer directly first. If excerpts or graph omit something the question needs, say what is not covered."
+    )
+
+    _require_genai_api_key()
     try:
-        response = await model.generate_content_async(prompt)
+        async with genai.Client().aio as aclient:
+            response = await aclient.models.generate_content(
+                model=_gemini_model_id(),
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=CHAT_SYSTEM,
+                    temperature=0.28,
+                    max_output_tokens=_chat_max_output_tokens(),
+                ),
+            )
     except Exception as e:
         raise ValueError(f"Gemini API error: {type(e).__name__}: {e}") from e
 
-    return (response.text or "").strip() or "(No response)"
+    raw = _format_chat_for_plain_ui((response.text or "").strip())
+    clipped = _truncate_chat_to_sentences(raw, max_sentences=3)
+    return clipped or "(No response)"

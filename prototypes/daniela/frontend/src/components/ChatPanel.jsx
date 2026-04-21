@@ -5,7 +5,7 @@ const DEFAULT_PROMPTS = [
   "What are the main modules in this repo?",
   "What depends on authentication?",
   "Where is the entry point?",
-  "Explain this repo in 5 bullet points.",
+  "Explain this repo in five short numbered points (1–5).",
 ];
 
 export default function ChatPanel({
@@ -17,7 +17,7 @@ export default function ChatPanel({
     {
       role: "assistant",
       text:
-        "Ask how modules connect, where configuration lives, or what an area of the graph is responsible for. Answers use the architecture snapshot we just built for this repo.",
+        "Ask how the repo is organized or what a part of the code does. Replies are short (a few complete sentences) from your last analyze—graph plus excerpts—not the whole repo.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -120,8 +120,10 @@ export default function ChatPanel({
               maxWidth: "94%",
               padding: "0.55rem 0.75rem",
               borderRadius: "10px",
-              fontSize: "0.86rem",
-              lineHeight: 1.45,
+              fontSize: msg.role === "assistant" ? "0.88rem" : "0.86rem",
+              lineHeight: msg.role === "assistant" ? 1.58 : 1.45,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
               background:
                 msg.role === "user" ? "var(--pine)" : "var(--paper-2)",
               color: msg.role === "user" ? "#f0fdf4" : "var(--ink)",

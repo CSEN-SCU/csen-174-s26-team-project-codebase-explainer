@@ -253,6 +253,50 @@ def select_files_to_read(tree: list[dict]) -> list[str]:
     return selected[:MAX_FILES_TO_READ]
 
 
+def select_extra_files_for_chat(paths: list[str], already: set[str], limit: int) -> list[str]:
+    """
+    Paths to fetch beyond the initial analyze batch — same rules as select_files_to_read,
+    excluding paths we already have so chat can see more of the repo.
+    """
+    scored: list[tuple[tuple[int, int, str], str]] = []
+    for path in paths:
+        if path in already:
+            continue
+        seg = path.split("/")[-1]
+        filename = seg.lower()
+        ext = "." + seg.rsplit(".", 1)[-1].lower() if "." in seg else ""
+
+        if filename in PRIORITY_FILES:
+            prio = 2
+        elif ext in READABLE_EXTENSIONS:
+            prio = 1
+        else:
+            continue
+        depth = path.count("/")
+        scored.append(((-prio, depth, path), path))
+    scored.sort(key=lambda x: x[0])
+    return [p for _, p in scored[:limit]]
+
+
+async def fetch_extra_repo_files(
+    owner: str,
+    repo: str,
+    token: Optional[str],
+    file_tree: list[str],
+    existing_paths: set[str],
+    max_additional: int = 24,
+) -> dict[str, str]:
+    """Fetch more readable blobs for chat (does not re-list the tree)."""
+    extra = select_extra_files_for_chat(file_tree, existing_paths, max_additional)
+    if not extra:
+        return {}
+    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+        contents = await asyncio.gather(
+            *[_fetch_blob_text(owner, repo, p, token, client) for p in extra]
+        )
+    return {p: c for p, c in zip(extra, contents) if c}
+
+
 async def get_repo_data(github_url: str, token: Optional[str] = None) -> dict:
     """
     Returns owner, repo, file_tree (all blob paths), files (selected path -> content).

@@ -31,6 +31,11 @@ def init_db():
                 UNIQUE(owner, repo)
             )
         """)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(analyses)").fetchall()}
+        if "source" not in cols:
+            conn.execute("ALTER TABLE analyses ADD COLUMN source TEXT")
+        if "code_context" not in cols:
+            conn.execute("ALTER TABLE analyses ADD COLUMN code_context TEXT")
         conn.commit()
 
 
@@ -42,7 +47,7 @@ def get_cached(owner: str, repo: str) -> Optional[dict]:
         ).fetchone()
     if not row:
         return None
-    return {
+    out = {
         "owner": row["owner"],
         "repo": row["repo"],
         "github_url": row["github_url"],
@@ -52,22 +57,40 @@ def get_cached(owner: str, repo: str) -> Optional[dict]:
         "edges": json.loads(row["edges"] or "[]"),
         "created_at": row["created_at"],
         "cached": True,
+        "source": row["source"] if "source" in row.keys() else None,
     }
+    if "code_context" in row.keys() and row["code_context"]:
+        try:
+            out["code_context"] = json.loads(row["code_context"])
+        except json.JSONDecodeError:
+            out["code_context"] = None
+    return out
 
 
-def save_analysis(owner: str, repo: str, github_url: str, graph: dict):
+def save_analysis(
+    owner: str,
+    repo: str,
+    github_url: str,
+    graph: dict,
+    *,
+    source: str = "gemini",
+    code_context: dict | None = None,
+):
     now = datetime.utcnow().isoformat()
+    cc_blob = json.dumps(code_context) if code_context else None
     with get_connection() as conn:
         conn.execute("""
-            INSERT INTO analyses (owner, repo, github_url, summary, tech_stack, nodes, edges, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO analyses (owner, repo, github_url, summary, tech_stack, nodes, edges, created_at, source, code_context)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(owner, repo) DO UPDATE SET
-                github_url  = excluded.github_url,
-                summary     = excluded.summary,
-                tech_stack  = excluded.tech_stack,
-                nodes       = excluded.nodes,
-                edges       = excluded.edges,
-                created_at  = excluded.created_at
+                github_url   = excluded.github_url,
+                summary      = excluded.summary,
+                tech_stack   = excluded.tech_stack,
+                nodes        = excluded.nodes,
+                edges        = excluded.edges,
+                created_at   = excluded.created_at,
+                source       = excluded.source,
+                code_context = excluded.code_context
         """, (
             owner,
             repo,
@@ -77,6 +100,8 @@ def save_analysis(owner: str, repo: str, github_url: str, graph: dict):
             json.dumps(graph.get("nodes", [])),
             json.dumps(graph.get("edges", [])),
             now,
+            source,
+            cc_blob,
         ))
         conn.commit()
 
