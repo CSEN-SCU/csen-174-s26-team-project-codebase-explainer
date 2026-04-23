@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,9 +9,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from github_fetcher import get_repo_data, parse_github_url
-from ai_analyzer import analyze_repo
-from database import init_db, get_cached, save_analysis, list_recent, delete_cache
+from fetcher.github_fetcher import get_repo_data, parse_github_url
+from analyzer.ai_analyzer import analyze_repo
+from fetcher.database import init_db, get_cached, save_analysis, list_recent, delete_cache
+from chat.chat import answer_question
 
 # Initialize DB on startup
 init_db()
@@ -120,3 +121,21 @@ def clear_cache(github_url: str = Query(...)):
         raise HTTPException(status_code=400, detail=str(e))
     deleted = delete_cache(owner, repo_name)
     return {"deleted": deleted, "repo": f"{owner}/{repo_name}"}
+
+
+class ChatRequest(BaseModel):
+    github_url: str
+    question: str
+
+
+@app.post("/chat")
+async def chat(request: ChatRequest):
+    """
+    Q&A on top of a cached architecture snapshot.
+    Owned by Daniela — see chat/chat.py for implementation.
+    """
+    try:
+        answer = await answer_question(request.github_url, request.question)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"answer": answer}

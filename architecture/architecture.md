@@ -27,63 +27,78 @@ The team is building on **Sally's prototype** as the foundation. The core pipeli
 
 ---
 
-## Context Diagram
+## Level 1 — System Context
 
-The context diagram shows GitMap as a single system surrounded by the one type of user and two external systems it depends on. A developer or student pastes a GitHub URL into GitMap. GitMap talks to GitHub to get the code and to OpenAI to understand it — those are the only two external dependencies.
+GitMap sits between one type of user and two external systems. A developer or student who needs to understand an unfamiliar codebase pastes a GitHub URL and receives an interactive architecture map within seconds — no cloning, no reading, no guessing. GitMap calls GitHub to get the raw repository contents and OpenAI to interpret them. Nothing else crosses the system boundary.
 
 ```mermaid
-C4Context
-  title System Context — GitMap
+graph TD
+    User(["👤 Developer / Student\nPastes a GitHub URL,\nexplores architecture"])
+    GitMap["🗺️ GitMap\nTurns any public GitHub URL\ninto an interactive architecture map"]
+    GitHub(["⚙️ GitHub REST API\nProvides file tree\nand raw file contents"])
+    OpenAI(["🤖 OpenAI API - GPT-4o\nGenerates module descriptions,\ntech stack and dependency edges"])
 
-  Person(user, "Developer / Student", "Wants to quickly understand the structure of an unfamiliar GitHub repository")
+    User -->|"paste URL, explore graph, ask questions"| GitMap
+    GitMap -->|"GET file tree + file contents / HTTPS"| GitHub
+    GitMap -->|"POST tree + snippets, receive JSON analysis / HTTPS"| OpenAI
 
-  System(gitmap, "GitMap", "Turns any public GitHub URL into an interactive visual architecture map with AI-generated module descriptions")
-
-  System_Ext(github, "GitHub REST API", "Provides the repository file tree and raw file contents for any public repo")
-  System_Ext(openai, "OpenAI API (GPT-4o)", "Generates per-module descriptions, tech stack, and dependency edges from the file tree and code snippets")
-
-  Rel(user, gitmap, "Pastes a GitHub URL, explores the architecture graph")
-  Rel(gitmap, github, "Fetches recursive file tree and key file contents", "HTTPS")
-  Rel(gitmap, openai, "Sends tree-formatted structure + file snippets, receives module descriptions", "HTTPS")
+    style User fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    style GitMap fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    style GitHub fill:#fef3c7,stroke:#f59e0b,color:#451a03
+    style OpenAI fill:#dcfce7,stroke:#16a34a,color:#14532d
 ```
 
 ---
 
-## Container Diagram
+## Level 2 — Component Diagram (FastAPI API)
 
-The container diagram zooms into GitMap and shows four containers. The Frontend is a single HTML file served by the backend — no separate build step. This simplifies deployment, with the trade-off of reduced flexibility for larger-scale frontends.
-
-The FastAPI Backend orchestrates everything: it checks the SQLite cache first, calls the Analysis Pipeline if needed, then returns the result. The Analysis Pipeline combines the GitHub Fetcher and AI Analyzer as logical modules with distinct responsibilities and external dependencies (GitHub vs OpenAI), while remaining part of the same runtime container for simplicity.
-
-The GitHub Fetcher and AI Analyzer are separate Python modules with distinct external dependencies (GitHub vs OpenAI), kept separate so each teammate owns one cleanly. The fetcher retrieves prioritized repository files, and the analyzer sends structured input to the OpenAI API and returns JSON describing the repository structure. This design balances analysis accuracy with API token cost.
-
-The SQLite Cache stores every completed analysis so repeat lookups never re-call GitHub or OpenAI. This improves performance and reduces cost, with the trade-off of limited scalability due to its local design.
-
-Data flows in one direction: user → frontend → backend → (cache hit? return immediately) → pipeline → cache → response. This linear flow simplifies reasoning about the system and avoids cyclic dependencies.
-
+The FastAPI backend is the orchestration layer. It exposes four endpoints, each owned by a distinct Python module. The `/analyze` route is the most complex — it is the only one that calls external services, and only when the SQLite cache has no stored result for the requested repo. All other routes are thin wrappers that read from or write to the local cache with no external calls.
 
 ```mermaid
-C4Container
-  title "Container Diagram — GitMap"
+graph TD
+    User(["👤 User"])
+    FE["🖥️ Frontend\nHTML, Cytoscape.js, Mermaid.js\nInteractive graph, Walkthrough, Chat panel"]
+    DB[("🗄️ SQLite Cache\nAnalyses stored by owner/repo")]
+    GitHub(["⚙️ GitHub REST API"])
+    OpenAI(["🤖 OpenAI API - GPT-4o"])
 
-  Person(user, "Developer / Student", "Inputs GitHub URL, explores graph, asks questions")
+    subgraph API ["⚡ FastAPI Backend"]
+        Analyze["POST /analyze\nCache-first: check DB, fetch repo,\nrun AI, save, return graph"]
+        Chat["POST /chat\nQ&A on cached analysis"]
+        Recent["GET /recent\nLanding page history"]
+        Clear["DELETE /cache\nInvalidate cached result"]
+        Fetcher["📡 GitHub Fetcher - Jesse\nFetches file tree and file contents"]
+        Analyzer["🧠 AI Analyzer - Sally\nBuilds graph from real file tree via GPT-4o"]
+        ChatMod["💬 Chat Module - Daniela\nAnswers questions using cached graph"]
+    end
 
-  System_Boundary(gitmap, "GitMap") {
-    Container(frontend, "Frontend (SPA)", "HTML · JavaScript · Cytoscape.js · Mermaid.js", "Interactive UI with graph, flow view, walkthrough, and chat panel")
-    Container(api, "Backend API", "Python · FastAPI · uvicorn", "Handles POST /analyze, GET /recent, POST /chat. Coordinates fetching, AI analysis, and caching")
-    Container(pipeline, "Analysis Pipeline", "Python modules (github_fetcher + ai_analyzer)", "Fetches prioritized repository files and performs AI-based analysis with structured JSON output. Trade-off: balances accuracy vs token cost")
-    ContainerDb(db, "SQLite Cache", "SQLite", "Stores analyzed repositories keyed by repo. Trade-off: simple and fast but not horizontally scalable")
-  }
+    User -->|"browser"| FE
+    FE -->|"POST /analyze"| Analyze
+    FE -->|"POST /chat"| Chat
+    FE -->|"GET /recent"| Recent
+    FE -->|"DELETE /cache"| Clear
+    Analyze -->|"cache hit: read / miss: write"| DB
+    Analyze -->|"on cache miss"| Fetcher
+    Analyze -->|"after fetch"| Analyzer
+    Chat --> ChatMod
+    ChatMod -->|"reads cached graph"| DB
+    Recent -->|"read"| DB
+    Clear -->|"delete"| DB
+    Fetcher -->|"HTTPS"| GitHub
+    Analyzer -->|"HTTPS"| OpenAI
+    ChatMod -->|"HTTPS"| OpenAI
 
-  System_Ext(github_api, "GitHub REST API", "Provides repository tree and file contents")
-  System_Ext(openai_api, "OpenAI API (GPT-4o)", "Returns summaries, module descriptions, and dependency relationships")
-
-  Rel(user, frontend, "Uses")
-  Rel(frontend, api, "HTTP / JSON", "POST /analyze · POST /chat")
-  Rel(api, db, "Read/Write cache")
-  Rel(api, pipeline, "Run analysis on cache miss")
-  Rel(pipeline, github_api, "Fetch repository data")
-  Rel(pipeline, openai_api, "Analyze code (LLM)")
+    style FE fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    style Analyze fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    style Chat fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    style Recent fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    style Clear fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    style Fetcher fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    style Analyzer fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    style ChatMod fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    style DB fill:#fef3c7,stroke:#f59e0b,color:#451a03
+    style GitHub fill:#f1f5f9,stroke:#94a3b8,color:#334155
+    style OpenAI fill:#dcfce7,stroke:#16a34a,color:#14532d
 ```
 
 ---
@@ -99,5 +114,8 @@ SQLite has zero setup — no separate server process, no connection string, no m
 **Why a single HTML file for the frontend instead of React?**
 A single HTML file means anyone on the team (or a gallery walk visitor) can open it directly in a browser with no npm install, no build step, no tooling. The tradeoff is harder component reuse — acceptable for a prototype. The standalone `demo.html` takes this further and needs no backend at all, making it useful for offline demos.
 
+**Why separate modules for fetcher, analyzer, and chat?**
+Each module has a distinct external dependency (GitHub API, OpenAI for analysis, OpenAI for chat) and a distinct owner. Keeping them in separate directories means teammates can develop and test independently with no merge conflicts. `main.py` only imports and wires them together — it has no business logic of its own.
+
 **What would break at scale?**
-The main bottleneck is holding an HTTP connection open while GitMap calls two external APIs sequentially. For large repos this can take 10–15 seconds. At scale we'd make analysis async: the frontend submits a job, the backend returns a job ID immediately, and the frontend polls for the result. We'd also add a job queue (Celery + Redis) so multiple analyses can run in parallel.
+The main bottleneck is holding an HTTP connection open while GitMap calls two external APIs sequentially. For large repos this can take 10–15 seconds. At scale we'd make analysis async: the frontend submits a job, the backend returns a job ID immediately, and the frontend polls for the result. We'd also add a job queue (Celery + Redis) so multiple analyses can run in parallel without blocking each other.
