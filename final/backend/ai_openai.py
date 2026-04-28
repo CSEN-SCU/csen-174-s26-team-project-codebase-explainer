@@ -10,26 +10,26 @@ SYSTEM_ANALYSIS = (
 )
 
 ANALYSIS_USER = """Analyze this repository and return a JSON object with this structure:
-{
+{{
   "summary": "2-3 sentence plain-English overview",
   "tech_stack": ["main technologies"],
   "nodes": [
-    {
+    {{
       "id": "unique_id",
       "label": "Display Name",
       "type": "module|service|config|entrypoint|external|database|test",
       "description": "1 sentence description",
       "files": ["path/to/file.py"]
-    }
+    }}
   ],
   "edges": [
-    {
+    {{
       "source": "node_id",
       "target": "node_id",
       "label": "imports|calls|extends|configures|stores"
-    }
+    }}
   ]
-}
+}}
 
 Rules:
 - 5-15 nodes max
