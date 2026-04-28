@@ -1,14 +1,13 @@
 """
 Integration tests — seam between FastAPI API and SQLite cache.
-Exercises the full POST /analyze → DB write → GET /recent read path
-without hitting real external APIs (GitHub and OpenAI are mocked).
+Exercises final backend POST /api/analyze -> DB write -> GET /api/recent.
 """
 
 
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from httpx import AsyncClient, ASGITransport
-from fetcher import database
+import database
 
 
 MOCK_REPO_DATA = {
@@ -52,12 +51,15 @@ def app(tmp_db):
 async def test_analyze_saves_result_to_db(app, tmp_db):
     # As a user, after analyzing a repo the result is cached so my next request returns instantly.
     # Arrange
-    with patch("main.get_repo_data", new=AsyncMock(return_value=MOCK_REPO_DATA)), \
-         patch("main.analyze_repo", new=AsyncMock(return_value=MOCK_GRAPH)):
+    with patch("main.get_repo_data", new=AsyncMock(return_value=MOCK_REPO_DATA)), patch(
+        "main.analyze_repo", new=AsyncMock(return_value=MOCK_GRAPH)
+    ):
 
         # Action
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.post("/analyze", json={"github_url": "https://github.com/tiangolo/fastapi"})
+            response = await client.post(
+                "/api/analyze", json={"github_url": "https://github.com/tiangolo/fastapi"}
+            )
 
     # Assert — endpoint returned 200 and the result is now in the DB
     assert response.status_code == 200
@@ -72,12 +74,15 @@ async def test_analyze_returns_cached_on_second_request(app, tmp_db):
     # Arrange — seed the cache directly
     database.save_analysis("tiangolo", "fastapi", "https://github.com/tiangolo/fastapi", MOCK_GRAPH)
 
-    with patch("main.get_repo_data", new=AsyncMock(return_value=MOCK_REPO_DATA)) as mock_fetch, \
-         patch("main.analyze_repo", new=AsyncMock(return_value=MOCK_GRAPH)) as mock_analyze:
+    with patch("main.get_repo_data", new=AsyncMock(return_value=MOCK_REPO_DATA)) as mock_fetch, patch(
+        "main.analyze_repo", new=AsyncMock(return_value=MOCK_GRAPH)
+    ) as mock_analyze:
 
         # Action
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            response = await client.post("/analyze", json={"github_url": "https://github.com/tiangolo/fastapi"})
+            response = await client.post(
+                "/api/analyze", json={"github_url": "https://github.com/tiangolo/fastapi"}
+            )
 
     # Assert — cache was hit, external APIs were never called
     assert response.status_code == 200
@@ -96,7 +101,7 @@ async def test_recent_endpoint_returns_list(app, tmp_db):
                            {"summary": "Repo 2", "tech_stack": [], "nodes": [], "edges": []})
     # Action
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/recent")
+        response = await client.get("/api/recent")
     # Assert
     assert response.status_code == 200
     analyses = response.json()["analyses"]
@@ -108,6 +113,8 @@ async def test_analyze_invalid_url_returns_400(app, tmp_db):
     # As a user, submitting a non-GitHub URL shows a clear 400 error rather than crashing.
     # Arrange / Action
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post("/analyze", json={"github_url": "https://notgithub.com/owner/repo"})
+        response = await client.post(
+            "/api/analyze", json={"github_url": "https://notgithub.com/owner/repo"}
+        )
     # Assert
     assert response.status_code == 400

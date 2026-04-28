@@ -94,6 +94,7 @@ async def analyze_repo(repo_data: dict) -> dict:
     for key in ("summary", "tech_stack", "nodes", "edges"):
         if key not in data:
             raise ValueError(f"Missing key in analysis JSON: {key}")
+    data["tech_stack"] = list(data.get("tech_stack") or [])[:10]
     return data
 
 
