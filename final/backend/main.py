@@ -2,6 +2,7 @@ import importlib.util
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
@@ -52,6 +53,11 @@ class ChatRequest(BaseModel):
     message: str
 
 
+def _is_github_url(url: str) -> bool:
+    host = (urlparse((url or "").strip()).hostname or "").lower()
+    return host in {"github.com", "www.github.com"}
+
+
 def _load_example_questions() -> list[str]:
     module_path = REPO_ROOT / "prototypes" / "final" / "example_questions.py"
     spec = importlib.util.spec_from_file_location("example_questions", module_path)
@@ -85,6 +91,8 @@ def recent(limit: int = Query(default=8, le=50)):
 
 @app.post("/api/analyze")
 async def analyze(request: AnalyzeRequest):
+    if not _is_github_url(request.github_url):
+        raise HTTPException(status_code=400, detail="Could not parse GitHub URL")
     try:
         owner, repo_name = parse_github_url(request.github_url)
     except ValueError as e:
@@ -129,6 +137,8 @@ async def chat(request: ChatRequest):
     msg = (request.message or "").strip()
     if not msg:
         raise HTTPException(status_code=400, detail="message is required")
+    if not _is_github_url(request.github_url):
+        raise HTTPException(status_code=400, detail="Could not parse GitHub URL")
 
     try:
         owner, repo_name = parse_github_url(request.github_url)

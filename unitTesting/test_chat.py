@@ -1,79 +1,68 @@
-"""
-Unit tests for chat/chat.py
-Owner: Daniela
-
-Tests cover current stub behaviour (cache miss path) and define the
-expected contract for the real implementation (these will stay RED until
-Daniela replaces the stub with a real OpenAI call).
-"""
-
+"""Unit tests for final `/api/chat` behavior."""
 
 import pytest
-from unittest.mock import patch
-from fetcher import database
+from httpx import ASGITransport, AsyncClient
+from unittest.mock import AsyncMock, patch
+
+import database
+import main
 
 
-# ── Stub behaviour (should be GREEN now) ──────────────────────────────────────
+@pytest.fixture
+def app():
+    return main.app
+
 
 @pytest.mark.asyncio
-async def test_answer_returns_string():
-    # As a user, asking a question always returns a string response, never an error object.
-    # Arrange
-    from chat.chat import answer_question
-    # Action
-    result = await answer_question("https://github.com/owner/repo", "What does this do?")
+async def test_chat_requires_analysis_first(app):
+    # As a user, asking chat before analysis returns a clear message.
+    # Arrange / Action
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/chat",
+            json={"github_url": "https://github.com/owner/repo", "message": "What does this do?"},
+        )
     # Assert
-    assert isinstance(result, str)
+    assert response.status_code == 400
+    assert "Analyze" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
-async def test_answer_no_cache_returns_prompt_message():
-    # As a user, asking about a repo that hasn't been analyzed yet gives a clear prompt to run /analyze first.
+async def test_chat_returns_answer_with_cache(app, tmp_path, monkeypatch):
+    # As a user, chat returns an answer when cached analysis exists.
     # Arrange
-    from chat.chat import answer_question
-    url = "https://github.com/nobody/nonexistent-repo-xyz"
-    # Action
-    result = await answer_question(url, "What does this repo do?")
-    # Assert
-    assert "analyze" in result.lower()
+    db_file = str(tmp_path / "chat.db")
+    monkeypatch.setattr(database, "DB_PATH", db_file)
+    database.init_db()
 
-
-# ── Real implementation contract (RED until Daniela implements) ───────────────
-
-@pytest.mark.asyncio
-async def test_answer_uses_cached_context():
-    # As a user, answers are grounded in the actual repo structure, not generic responses.
-    # Arrange — seed the cache with a known summary
-    from chat.chat import answer_question
-    from fetcher import database as db
-
-    import tempfile, monkeypatch
-    # This test will stay RED until the real OpenAI call is wired up.
-    # The stub currently ignores the cached data and returns a placeholder.
     graph = {
         "summary": "A FastAPI backend for serving ML predictions.",
         "tech_stack": ["Python", "FastAPI"],
-        "nodes": [{"id": "root", "label": "ml-api", "description": "ML API root"}],
+        "nodes": [{"id": "root", "label": "ml-api", "description": "ML API root", "type": "module"}],
         "edges": [],
     }
-    db.save_analysis("owner", "ml-api", "https://github.com/owner/ml-api", graph)
+    database.save_analysis("owner", "ml-api", "https://github.com/owner/ml-api", graph, source="openai")
 
     # Action
-    result = await answer_question("https://github.com/owner/ml-api", "What framework does this use?")
-
-    # Assert — real answer should mention FastAPI, stub won't
-    assert "FastAPI" in result or "fastapi" in result.lower()
+    with patch("main.chat_about_repo", new=AsyncMock(return_value="Uses FastAPI.")):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/chat",
+                json={"github_url": "https://github.com/owner/ml-api", "message": "What framework?"},
+            )
+    # Assert
+    assert response.status_code == 200
+    assert "FastAPI" in response.json()["answer"]
 
 
 @pytest.mark.asyncio
-async def test_answer_does_not_hallucinate_modules():
-    # As a user, the chat answer only references modules that actually exist in the repo graph.
-    # Arrange
-    from chat.chat import answer_question
-    # Action
-    result = await answer_question("https://github.com/tiangolo/fastapi", "List all modules.")
-    # Assert — result should be a string (stub passes), real impl must not invent paths
-    assert isinstance(result, str)
-    # RED: real implementation should be validated against node labels from the cached graph
-    # This assertion will need strengthening once Daniela's implementation is complete.
-    assert len(result) > 0
+async def test_chat_rejects_empty_message(app):
+    # As a user, empty chat messages are rejected with 400.
+    # Arrange / Action
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/chat",
+            json={"github_url": "https://github.com/owner/repo", "message": "   "},
+        )
+    # Assert
+    assert response.status_code == 400

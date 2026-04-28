@@ -1,19 +1,11 @@
 """
-Unit tests for fetcher/github_fetcher.py and fetcher/database.py
-Owner: Jesse
-
-Tests cover:
-  - parse_github_url(): extracts (owner, repo) from various GitHub URL formats
-  - select_files_to_read(): prioritises entry-point and config files
-  - Database cache: save, retrieve, delete, and cache-miss behaviour
+Unit tests for final/backend fetch + database seams.
 """
 
 
 import pytest
-import tempfile
-from unittest.mock import patch
-from fetcher.github_fetcher import parse_github_url, select_files_to_read
-from fetcher import database
+import main
+import database
 
 
 # ── parse_github_url ───────────────────────────────────────────────────────────
@@ -23,7 +15,7 @@ def test_parse_github_url_https():
     # Arrange
     url = "https://github.com/tiangolo/fastapi"
     # Action
-    owner, repo = parse_github_url(url)
+    owner, repo = main.parse_github_url(url)
     # Assert
     assert owner == "tiangolo"
     assert repo == "fastapi"
@@ -34,7 +26,7 @@ def test_parse_github_url_with_git_suffix():
     # Arrange
     url = "https://github.com/owner/my-repo.git"
     # Action
-    owner, repo = parse_github_url(url)
+    owner, repo = main.parse_github_url(url)
     # Assert
     assert owner == "owner"
     assert repo == "my-repo"
@@ -45,7 +37,7 @@ def test_parse_github_url_with_trailing_slash():
     # Arrange
     url = "https://github.com/owner/repo/"
     # Action
-    owner, repo = parse_github_url(url)
+    owner, repo = main.parse_github_url(url)
     # Assert
     assert owner == "owner"
     assert repo == "repo"
@@ -57,10 +49,10 @@ def test_parse_github_url_invalid_raises():
     url = "https://gitlab.com/owner/repo"
     # Action / Assert
     with pytest.raises(ValueError):
-        parse_github_url(url)
+        main.parse_github_url(url)
 
 
-# ── select_files_to_read ───────────────────────────────────────────────────────
+# ── select_files_to_read (from REST fetcher loaded by final/main.py) ─────────
 
 def test_select_files_prioritises_readme():
     # As a user, README is always included and appears before generic source files
@@ -73,7 +65,7 @@ def test_select_files_prioritises_readme():
         {"path": "src/utils.py", "type": "blob"},
     ]
     # Action
-    selected = select_files_to_read(tree)
+    selected = main._fetcher_module.select_files_to_read(tree)
     # Assert
     assert "README.md" in selected
     assert selected.index("README.md") < selected.index("src/models.py")
@@ -84,7 +76,7 @@ def test_select_files_respects_max_limit():
     # Arrange — generate 50 fake Python files
     tree = [{"path": f"src/module_{i}.py", "type": "blob"} for i in range(50)]
     # Action
-    selected = select_files_to_read(tree)
+    selected = main._fetcher_module.select_files_to_read(tree)
     # Assert
     assert len(selected) <= 25
 
@@ -98,7 +90,7 @@ def test_select_files_excludes_non_readable():
         {"path": "binary.exe", "type": "blob"},
     ]
     # Action
-    selected = select_files_to_read(tree)
+    selected = main._fetcher_module.select_files_to_read(tree)
     # Assert
     assert "image.png" not in selected
     assert "binary.exe" not in selected
