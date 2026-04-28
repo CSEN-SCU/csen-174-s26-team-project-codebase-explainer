@@ -28,7 +28,7 @@ MAX_FILES_TO_READ = 25   # need more files now: README + source files for import
 def parse_github_url(url: str) -> tuple[str, str]:
     """Extract (owner, repo) from a GitHub URL."""
     url = url.strip().rstrip("/")
-    pattern = r"github\.com[/:]([^/]+)/([^/\s\.]+)"
+    pattern = r"(?<![a-zA-Z0-9])github\.com[/:]([^/]+)/([^/\s\.]+)"
     match = re.search(pattern, url)
     if not match:
         raise ValueError(f"Could not parse GitHub URL: {url}")
