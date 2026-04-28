@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GitMap Final - Sally UI + Onboarding + Chat</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117; --surface: #161b22; --surface2: #1f2733; --border: #30363d;
+      --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --good: #3fb950; --warn: #f78166;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--bg); }
+    #landing { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; }
+    .card { width: min(860px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.1rem; }
+    .logo { font-size: 2.5rem; font-weight: 800; margin: 0 0 .4rem; background: linear-gradient(135deg, var(--accent), var(--good)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .tag { margin: 0 0 1rem; color: var(--muted); }
+    .steps { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .7rem; margin-bottom: 1rem; }
+    .step { border: 1px solid var(--border); border-radius: 10px; padding: .65rem; background: var(--surface2); }
+    .step b { color: var(--accent); font-size: .72rem; text-transform: uppercase; }
+    .row { display: flex; gap: .5rem; }
+    input { flex: 1; background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: .7rem .85rem; }
+    button { border: none; border-radius: 10px; padding: .7rem 1rem; font-weight: 600; cursor: pointer; }
+    .primary { background: var(--accent); color: #071622; }
+    .ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    #error { color: var(--warn); font-size: .86rem; min-height: 1.2em; margin-top: .4rem; }
+    #app { display: none; height: 100vh; }
+    #app.visible { display: flex; }
+    #side { width: 380px; border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; }
+    #sideBody { overflow: auto; padding: .9rem 1rem; }
+    .label { margin: .9rem 0 .4rem; text-transform: uppercase; letter-spacing: .06em; font-size: .7rem; color: var(--muted); font-weight: 700; }
+    .chipRow { display: flex; gap: .35rem; flex-wrap: wrap; }
+    .chip { border: 1px solid var(--border); border-radius: 999px; padding: .18rem .55rem; font-size: .75rem; color: var(--muted); background: var(--surface2); }
+    #nodeDetail { border: 1px solid var(--border); border-radius: 10px; background: var(--surface2); padding: .6rem .7rem; font-size: .82rem; }
+    .guide { border: 1px solid var(--border); border-radius: 10px; padding: .6rem .7rem; background: var(--surface2); }
+    .guide ol { margin: .35rem 0 0; padding-left: 1rem; }
+    .guide li { margin: .2rem 0; color: var(--muted); font-size: .82rem; }
+    #chatBox { border: 1px solid var(--border); border-radius: 10px; background: #11161d; display: flex; flex-direction: column; height: 290px; }
+    #chatMsgs { flex: 1; overflow: auto; padding: .5rem; display: flex; flex-direction: column; gap: .45rem; }
+    .msg { padding: .45rem .55rem; border-radius: 8px; font-size: .82rem; white-space: pre-wrap; }
+    .msg.user { background: #1f4f7d; align-self: flex-end; }
+    .msg.bot { background: #1f2733; border: 1px solid #2d3745; align-self: flex-start; }
+    #promptRow { display: flex; flex-wrap: wrap; gap: .3rem; padding: .45rem; border-top: 1px solid var(--border); }
+    .prompt { font-size: .72rem; padding: .2rem .45rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); }
+    #chatInputRow { display: flex; gap: .35rem; padding: .45rem; border-top: 1px solid var(--border); }
+    #chatInput { flex: 1; padding: .42rem .5rem; border-radius: 8px; font-size: .8rem; }
+    #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    #top { display: flex; align-items: center; gap: .4rem; border-bottom: 1px solid var(--border); background: var(--surface); padding: .5rem .7rem; }
+    .tab { padding: .3rem .65rem; font-size: .8rem; border: 1px solid var(--border); border-radius: 20px; background: transparent; color: var(--muted); }
+    .tab.active { background: var(--accent); color: #071622; border-color: var(--accent); }
+    #cyPanel { flex: 1; position: relative; }
+    #cy { width: 100%; height: 100%; }
+    #flowPanel { display: none; flex: 1; overflow: auto; padding: 1rem; }
+    #flowPanel.active { display: block; }
+    #loading { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; place-items: center; color: var(--text); }
+    #loading.visible { display: grid; }
+    @media (max-width: 900px) { #app.visible { flex-direction: column; } #side { width: 100%; height: 55vh; border-right: none; border-bottom: 1px solid var(--border); } }
+  </style>
+</head>
+<body>
+  <section id="landing">
+    <div class="card">
+      <h1 class="logo">GitMap</h1>
+      <p class="tag">Sally frontend foundation, now with Daniela's onboarding + chatbot experience.</p>
+      <div class="steps">
+        <div class="step"><b>Step 1</b><div>Paste a GitHub URL.</div></div>
+        <div class="step"><b>Step 2</b><div>OpenAI maps architecture from REST-fetched code.</div></div>
+        <div class="step"><b>Step 3</b><div>Use onboarding + chat to get oriented fast.</div></div>
+      </div>
+      <div class="row">
+        <input id="urlInput" type="url" placeholder="https://github.com/owner/repo" />
+        <button class="primary" id="analyzeBtn">Analyze</button>
+      </div>
+      <div id="error"></div>
+    </div>
+  </section>
+
+  <div id="app">
+    <aside id="side">
+      <div id="sideBody">
+        <div class="label">Overview</div>
+        <div id="summary">Analyze a repository to begin.</div>
+
+        <div class="label">Tech stack</div>
+        <div id="tech" class="chipRow"></div>
+
+        <div class="label">Onboarding path</div>
+        <div class="guide">
+          <ol id="guideList"></ol>
+        </div>
+
+        <div class="label">Selected node</div>
+        <div id="nodeDetail">Click any node for details.</div>
+
+        <div class="label">Ask AI about this repo</div>
+        <div id="chatBox">
+          <div id="chatMsgs">
+            <div class="msg bot">Ask about modules, entrypoints, or dependencies.</div>
+          </div>
+          <div id="promptRow"></div>
+          <div id="chatInputRow">
+            <input id="chatInput" placeholder="Where is the entry point?" />
+            <button id="sendBtn" class="primary" style="padding:.45rem .7rem;">Send</button>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:.4rem;padding:.6rem;border-top:1px solid var(--border);">
+        <button id="backBtn" class="ghost">New Search</button>
+        <button id="refreshBtn" class="ghost">Re-analyze</button>
+      </div>
+    </aside>
+    <main id="main">
+      <div id="top">
+        <button class="tab active" id="interactiveTab">Interactive</button>
+        <button class="tab" id="flowTab">Flowchart</button>
+        <span id="repoBadge" style="margin-left:auto;color:var(--muted);font-size:.8rem;"></span>
+      </div>
+      <div id="cyPanel"><div id="cy"></div></div>
+      <div id="flowPanel"><div class="mermaid" id="flowChart"></div></div>
+    </main>
+  </div>
+
+  <div id="loading">Analyzing repository...</div>
+
+  <script>
+    cytoscape.use(cytoscapeDagre);
+    mermaid.initialize({ startOnLoad: false, theme: "dark" });
+    const API = "http://127.0.0.1:8001/api";
+    let currentUrl = "";
+    let currentAnalysis = null;
+    let cy = null;
+
+    const $ = (id) => document.getElementById(id);
+    const typeColor = (t) => ({
+      entrypoint: "#58a6ff", module: "#3fb950", service: "#d2a8ff", config: "#e3b341",
+      external: "#f78166", database: "#79c0ff", test: "#56d364"
+    }[(t || "").toLowerCase()] || "#8b949e");
+
+    function setLoading(v) { $("loading").classList.toggle("visible", v); }
+    function showError(msg) { $("error").textContent = msg || ""; }
+
+    function setGuide(nodes, edges) {
+      const entry = nodes.find(n => (n.type || "").toLowerCase() === "entrypoint") || nodes[0];
+      const service = nodes.find(n => (n.type || "").toLowerCase() === "service") || nodes.find(n => (n.type || "").toLowerCase() === "module");
+      const db = nodes.find(n => ["database","external"].includes((n.type || "").toLowerCase()));
+      const lines = [];
+      if (entry) lines.push(`Start at ${entry.label}.`);
+      if (service && service !== entry) lines.push(`Then read ${service.label} for core behavior.`);
+      if (db) lines.push(`Finally inspect ${db.label} for data/integration flow.`);
+      const core = (edges || []).slice(0, 2).map(e => `${e.source} -> ${e.target}`);
+      if (core.length) lines.push(`Core links: ${core.join(", ")}.`);
+      $("guideList").innerHTML = lines.map(x => `<li>${x}</li>`).join("");
+    }
+
+    function renderSidebar(data) {
+      $("summary").textContent = data.summary || "No summary.";
+      $("repoBadge").textContent = data.repo || "";
+      $("tech").innerHTML = (data.tech_stack || []).map(t => `<span class="chip">${t}</span>`).join("");
+      setGuide(data.nodes || [], data.edges || []);
+    }
+
+    function renderGraph(data) {
+      const elements = [
+        ...(data.nodes || []).map(n => ({ data: { id: n.id, label: n.label, type: n.type, description: n.description, files: n.files || [], color: typeColor(n.type) } })),
+        ...(data.edges || []).map((e, i) => ({ data: { id: `e_${i}`, source: e.source, target: e.target, label: e.label || "" } })),
+      ];
+      if (cy) cy.destroy();
+      cy = cytoscape({
+        container: $("cy"),
+        elements,
+        style: [
+          { selector: "node", style: { "background-color":"data(color)", "label":"data(label)", "text-valign":"center", "text-halign":"center", "text-wrap":"wrap", "text-max-width":"110px", "font-size":"11px", "color":"#e6edf3", "shape":"round-rectangle", "padding":"10px", "width":"label", "height":"label", "border-width":2, "border-color":"#30363d" } },
+          { selector: "edge", style: { "curve-style":"bezier", "target-arrow-shape":"triangle", "line-color":"#3d4653", "target-arrow-color":"#3d4653", "width":1.6, "label":"data(label)", "font-size":"8px", "color":"#8b949e" } }
+        ],
+        layout: { name: "dagre", rankDir: "TB", rankSep: 95, nodeSep: 65, animate: true, padding: 40 }
+      });
+      cy.on("tap", "node", (evt) => {
+        const d = evt.target.data();
+        const files = (d.files || []).slice(0, 5).map(f => `<div>• ${f}</div>`).join("");
+        $("nodeDetail").innerHTML = `<b>${d.label}</b><div style="margin:.25rem 0;color:${typeColor(d.type)}">${d.type || "module"}</div><div style="color:var(--muted)">${d.description || ""}</div>${files}`;
+      });
+    }
+
+    async function renderFlow(data) {
+      const lines = ["flowchart TD"];
+      (data.nodes || []).forEach(n => lines.push(`${n.id.replace(/[^a-zA-Z0-9_]/g,"_")}["${(n.label || n.id).replace(/"/g,"'")}"]`));
+      (data.edges || []).forEach(e => lines.push(`${e.source.replace(/[^a-zA-Z0-9_]/g,"_")} --> ${e.target.replace(/[^a-zA-Z0-9_]/g,"_")}`));
+      const def = lines.join("\n");
+      const { svg } = await mermaid.render("m" + Date.now(), def);
+      $("flowChart").innerHTML = svg;
+    }
+
+    function addMessage(role, text) {
+      const node = document.createElement("div");
+      node.className = `msg ${role}`;
+      node.textContent = text;
+      $("chatMsgs").appendChild(node);
+      $("chatMsgs").scrollTop = $("chatMsgs").scrollHeight;
+    }
+
+    async function loadPrompts() {
+      try {
+        const res = await fetch(`${API}/example-questions`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const prompts = Array.isArray(data.questions) ? data.questions : [];
+        $("promptRow").innerHTML = prompts.map(p => `<button class="prompt">${p}</button>`).join("");
+        Array.from($("promptRow").querySelectorAll(".prompt")).forEach((b) => {
+          b.onclick = () => { $("chatInput").value = b.textContent; sendChat(); };
+        });
+      } catch {}
+    }
+
+    async function sendChat() {
+      const message = $("chatInput").value.trim();
+      if (!message || !currentUrl) return;
+      $("chatInput").value = "";
+      addMessage("user", message);
+      try {
+        const res = await fetch(`${API}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ github_url: currentUrl, message })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Chat request failed.");
+        addMessage("bot", data.answer || "(No response)");
+      } catch (e) {
+        addMessage("bot", `Could not get answer: ${e.message}`);
+      }
+    }
+
+    async function analyze(refresh = false) {
+      const url = $("urlInput").value.trim();
+      if (!url) { showError("Please paste a GitHub URL."); return; }
+      currentUrl = url;
+      showError("");
+      setLoading(true);
+      try {
+        const res = await fetch(`${API}/analyze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ github_url: url, refresh })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Analyze failed.");
+        currentAnalysis = data;
+        $("landing").style.display = "none";
+        $("app").classList.add("visible");
+        renderSidebar(data);
+        renderGraph(data);
+        await renderFlow(data);
+      } catch (e) {
+        showError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    $("analyzeBtn").onclick = () => analyze(false);
+    $("refreshBtn").onclick = () => analyze(true);
+    $("backBtn").onclick = () => { $("app").classList.remove("visible"); $("landing").style.display = ""; };
+    $("sendBtn").onclick = sendChat;
+    $("chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
+    $("urlInput").addEventListener("keydown", (e) => { if (e.key === "Enter") analyze(false); });
+
+    $("interactiveTab").onclick = () => {
+      $("interactiveTab").classList.add("active");
+      $("flowTab").classList.remove("active");
+      $("cyPanel").style.display = "";
+      $("flowPanel").classList.remove("active");
+    };
+    $("flowTab").onclick = () => {
+      $("flowTab").classList.add("active");
+      $("interactiveTab").classList.remove("active");
+      $("cyPanel").style.display = "none";
+      $("flowPanel").classList.add("active");
+    };
+
+    loadPrompts();
+    $("urlInput").value = "https://github.com/tiangolo/fastapi";
+  </script>
+</body>
+</html>
