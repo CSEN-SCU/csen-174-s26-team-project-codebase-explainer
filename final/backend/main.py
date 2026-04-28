@@ -14,7 +14,7 @@ from ai_openai import analyze_repo, build_chat_code_context, chat_about_repo
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 # Reuse Daniela's GitHub + DB modules to speed integration.
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DANIELA_BACKEND = REPO_ROOT / "prototypes" / "daniela" / "backend"
 if str(DANIELA_BACKEND) not in sys.path:
     sys.path.append(str(DANIELA_BACKEND))
