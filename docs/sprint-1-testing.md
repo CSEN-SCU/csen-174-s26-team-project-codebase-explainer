@@ -74,12 +74,6 @@ Every test follows Arrange-Action-Assert with a plain-language comment at the to
 
 Running the initial suite (`initial_test.out`) revealed a real bug alongside the intentional RED: `test_analyze_invalid_url_returns_400` was failing with a 502 instead of 400 when given `https://notgithub.com/owner/repo`. The root cause was a regex too permissive in `fetcher/github_fetcher.py` — the pattern `github\.com[/:]` matched `notgithub.com` because `github.com` appears as a substring of it. The fix was a one-character negative lookbehind: `(?<![a-zA-Z0-9])github\.com[/:]`, which requires `github.com` to not be preceded by any alphanumeric character. After the fix the full suite reads **39 passed, 1 failed** (the intentional RED only).
 
-# Sprint 1 Testing
-
-## Overview
-
-In this sprint, our team focused on applying test-driven development (TDD) to define and validate key behaviors of our system. We created initial failing tests, implemented partial functionality to pass some tests, and used an AI testing skill to expand our test coverage. We also critically evaluated AI-generated tests to improve their quality.
-
 ---
 
 ## Part 3: Testing Skill Installed and Used
