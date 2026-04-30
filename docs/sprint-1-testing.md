@@ -132,6 +132,7 @@ These changes make the test more robust and less dependent on specific wording. 
 ---
 
 ## Part 5: Jolli Connection Screenshot
-![Uploading Screenshot 2026-04-30 at 11.39.48 AM.png…]()
+<img width="1512" height="804" alt="Screenshot 2026-04-30 at 11 39 48 AM" src="https://github.com/user-attachments/assets/d7ea92ff-ff69-4d15-b5da-4b5b19354077" />
+
 
 
