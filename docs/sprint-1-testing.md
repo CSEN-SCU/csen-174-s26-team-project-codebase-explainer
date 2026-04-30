@@ -129,4 +129,9 @@ These changes make the test more robust and less dependent on specific wording. 
 
 ---
 
+---
+
+## Part 5: Jolli Connection Screenshot
+![Uploading Screenshot 2026-04-30 at 11.39.48 AM.png…]()
+
 
