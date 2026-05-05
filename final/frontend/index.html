@@ -129,7 +129,9 @@
   <script>
     cytoscape.use(cytoscapeDagre);
     mermaid.initialize({ startOnLoad: false, theme: "dark" });
-    const API = "http://127.0.0.1:8001/api";
+    const API = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+      ? "http://127.0.0.1:8001/api"
+      : window.location.origin + "/api";
     let currentUrl = "";
     let currentAnalysis = null;
     let cy = null;
