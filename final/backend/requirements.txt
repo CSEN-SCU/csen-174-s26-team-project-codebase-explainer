@@ -1,4 +1,6 @@
-flask
-gunicorn
-openai>=1.0.0
-flask-cors
+fastapi
+uvicorn[standard]
+openai
+httpx
+python-dotenv
+aiofiles
