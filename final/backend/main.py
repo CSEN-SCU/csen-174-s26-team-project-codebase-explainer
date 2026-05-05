@@ -59,7 +59,7 @@ def _is_github_url(url: str) -> bool:
 
 
 def _load_example_questions() -> list[str]:
-    module_path = REPO_ROOT / "prototypes" / "final" / "example_questions.py"
+    module_path = REPO_ROOT / "final" / "example_questions.py"
     spec = importlib.util.spec_from_file_location("example_questions", module_path)
     if spec is None or spec.loader is None:
         return []
