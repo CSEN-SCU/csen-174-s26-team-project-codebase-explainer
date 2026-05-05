@@ -4,7 +4,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 from unittest.mock import AsyncMock, patch
-from fetcher import database
+import database
 import main
 
 
@@ -23,16 +23,16 @@ def tmp_db(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_chat_requires_analysis_first(app):
-    # As a user, asking chat before analysis returns a clear message to run /analyze first.
+    # As a user, asking chat before analysis returns a clear message to run /api/analyze first.
     # Arrange / Action
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
-            "/chat",
-            json={"github_url": "https://github.com/owner/repo", "question": "What does this do?"},
+            "/api/chat",
+            json={"github_url": "https://github.com/owner/repo", "message": "What does this do?"},
         )
     # Assert
-    assert response.status_code == 200
-    assert "analyze" in response.json()["answer"].lower()
+    assert response.status_code == 400
+    assert "analyze" in response.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
