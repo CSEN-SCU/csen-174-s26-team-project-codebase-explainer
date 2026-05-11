@@ -1,6 +1,5 @@
 import importlib.util
 import os
-import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -10,27 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from ai_openai import analyze_repo, build_chat_code_context, chat_about_repo
+from fetcher.github_fetcher import get_repo_data, parse_github_url
+from database import delete_cache, get_cached, init_db, list_recent, save_analysis
 
 # Load this backend's local .env
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-# Reuse Daniela's GitHub + DB modules to speed integration.
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DANIELA_BACKEND = REPO_ROOT / "prototypes" / "daniela" / "backend"
-if str(DANIELA_BACKEND) not in sys.path:
-    sys.path.append(str(DANIELA_BACKEND))
-
-from database import delete_cache, get_cached, init_db, list_recent, save_analysis  # noqa: E402
-
-# Use Sally's REST GitHub fetcher (not GraphQL).
-SALLY_FETCHER_PATH = REPO_ROOT / "prototypes" / "sally" / "backend" / "fetcher" / "github_fetcher.py"
-_fetcher_spec = importlib.util.spec_from_file_location("sally_fetcher", SALLY_FETCHER_PATH)
-if _fetcher_spec is None or _fetcher_spec.loader is None:
-    raise RuntimeError("Could not load Sally REST fetcher.")
-_fetcher_module = importlib.util.module_from_spec(_fetcher_spec)
-_fetcher_spec.loader.exec_module(_fetcher_module)
-get_repo_data = _fetcher_module.get_repo_data
-parse_github_url = _fetcher_module.parse_github_url
 
 init_db()
 app = FastAPI(title="GitMap API — Final (OpenAI)")

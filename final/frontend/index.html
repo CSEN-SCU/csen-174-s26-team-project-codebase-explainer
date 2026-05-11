@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GitMap Final - Sally UI + Onboarding + Chat</title>
+  <title>GitMap</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
@@ -15,276 +15,779 @@
     }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--bg); }
-    #landing { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; }
-    .card { width: min(860px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 1.1rem; }
-    .logo { font-size: 2.5rem; font-weight: 800; margin: 0 0 .4rem; background: linear-gradient(135deg, var(--accent), var(--good)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .tag { margin: 0 0 1rem; color: var(--muted); }
-    .steps { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .7rem; margin-bottom: 1rem; }
-    .step { border: 1px solid var(--border); border-radius: 10px; padding: .65rem; background: var(--surface2); }
-    .step b { color: var(--accent); font-size: .72rem; text-transform: uppercase; }
-    .row { display: flex; gap: .5rem; }
-    input { flex: 1; background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: .7rem .85rem; }
-    button { border: none; border-radius: 10px; padding: .7rem 1rem; font-weight: 600; cursor: pointer; }
+
+    /* ── Landing ── */
+    #landing {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 2rem; position: relative; overflow: hidden;
+      background: radial-gradient(ellipse 90% 55% at 50% -5%, rgba(88,166,255,.13) 0%, transparent 65%), var(--bg);
+    }
+    #bgCanvas { position: absolute; inset: 0; pointer-events: none; }
+    .hero {
+      position: relative; z-index: 1; text-align: center; width: min(640px, 100%);
+      animation: heroIn .7s ease both;
+    }
+    @keyframes heroIn { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
+    .hero-badge {
+      display: inline-block; border: 1px solid rgba(88,166,255,.3); border-radius: 999px;
+      padding: .22rem .85rem; font-size: .7rem; color: var(--accent);
+      letter-spacing: .07em; text-transform: uppercase; margin-bottom: 1.3rem;
+      background: rgba(88,166,255,.07);
+    }
+    .logo {
+      font-size: clamp(3.2rem, 9vw, 5.8rem); font-weight: 900; letter-spacing: -.035em;
+      line-height: 1; margin: 0 0 1rem;
+      background: linear-gradient(130deg, #58a6ff 0%, #3fb950 45%, #ffd700 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      background-size: 200%; animation: shimmer 5s ease infinite;
+    }
+    @keyframes shimmer { 0%,100%{background-position:0%} 50%{background-position:100%} }
+    .hero-tagline { font-size: clamp(.92rem,2.4vw,1.1rem); color: var(--muted); line-height:1.75; margin: 0 0 2rem; }
+    /* Unified search bar */
+    .search-bar {
+      display: flex; align-items: stretch; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+      margin-bottom: .65rem; transition: border-color .2s, box-shadow .2s;
+    }
+    .search-bar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,.13); }
+    .search-bar input {
+      flex: 1; background: transparent; border: none; outline: none;
+      padding: .95rem 1rem; font-size: .95rem; color: var(--text); font-family: inherit; min-width: 0;
+    }
+    .search-bar input::placeholder { color: var(--muted); }
+    .search-bar button {
+      background: var(--accent); color: #071622; border: none;
+      padding: 0 1.6rem; font-weight: 700; font-size: .9rem; cursor: pointer;
+      transition: background .15s; white-space: nowrap; border-radius: 0;
+    }
+    .search-bar button:hover { background: #79b8ff; }
+    #error { color: var(--warn); font-size: .84rem; min-height: 1.2em; margin-top: .35rem; text-align: left; padding: 0 .2rem; }
+    /* Feature chips */
+    .feat-row { display: flex; justify-content: center; flex-wrap: wrap; gap: .6rem 1.6rem; margin: 1rem 0 2.5rem; }
+    .feat { display: flex; align-items: center; gap: .4rem; font-size: .76rem; color: var(--muted); }
+    .feat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    /* How it works */
+    .how { display: flex; align-items: flex-start; justify-content: center; gap: 0; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 2rem; }
+    .how-step { flex: 1; min-width: 140px; max-width: 180px; padding: 0 1rem; text-align: center; }
+    .how-num { font-size: 2rem; font-weight: 900; line-height: 1; color: var(--border); margin-bottom: .5rem; }
+    .how-step b { display: block; font-size: .82rem; color: var(--text); margin-bottom: .2rem; }
+    .how-step span { font-size: .72rem; color: var(--muted); line-height: 1.5; }
+    .how-divider { color: var(--border); font-size: 1.4rem; padding: 1.2rem .2rem 0; align-self: flex-start; }
+    /* Shared input/button used in app (not landing) */
+    input { flex: 1; background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: .7rem .85rem; font-family: inherit; }
+    button { border: none; border-radius: 10px; padding: .7rem 1rem; font-weight: 600; cursor: pointer; font-family: inherit; }
     .primary { background: var(--accent); color: #071622; }
     .ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-    #error { color: var(--warn); font-size: .86rem; min-height: 1.2em; margin-top: .4rem; }
+
+    /* ── App shell ── */
     #app { display: none; height: 100vh; }
     #app.visible { display: flex; }
-    #side { width: 380px; border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; }
-    #sideBody { overflow: auto; padding: .9rem 1rem; }
-    .label { margin: .9rem 0 .4rem; text-transform: uppercase; letter-spacing: .06em; font-size: .7rem; color: var(--muted); font-weight: 700; }
+    #side { width: 360px; border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; flex-shrink: 0; }
+    #sideBody { overflow: auto; padding: .9rem 1rem; flex: 1; }
+    .label { margin: .9rem 0 .35rem; text-transform: uppercase; letter-spacing: .06em; font-size: .68rem; color: var(--muted); font-weight: 700; }
     .chipRow { display: flex; gap: .35rem; flex-wrap: wrap; }
     .chip { border: 1px solid var(--border); border-radius: 999px; padding: .18rem .55rem; font-size: .75rem; color: var(--muted); background: var(--surface2); }
-    #nodeDetail { border: 1px solid var(--border); border-radius: 10px; background: var(--surface2); padding: .6rem .7rem; font-size: .82rem; }
+    #nodeDetail { border: 1px solid var(--border); border-radius: 10px; background: var(--surface2); padding: .6rem .7rem; font-size: .82rem; min-height: 60px; }
     .guide { border: 1px solid var(--border); border-radius: 10px; padding: .6rem .7rem; background: var(--surface2); }
     .guide ol { margin: .35rem 0 0; padding-left: 1rem; }
     .guide li { margin: .2rem 0; color: var(--muted); font-size: .82rem; }
-    #chatBox { border: 1px solid var(--border); border-radius: 10px; background: #11161d; display: flex; flex-direction: column; height: 290px; }
+
+    /* Color legend */
+    #colorLegend { display: flex; flex-direction: column; gap: .3rem; }
+    .legend-item { display: flex; align-items: center; gap: .5rem; font-size: .75rem; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+    .legend-name { font-weight: 600; min-width: 65px; }
+    .legend-desc { color: var(--muted); }
+
+    /* Chat */
+    #chatBox { border: 1px solid var(--border); border-radius: 10px; background: #11161d; display: flex; flex-direction: column; height: 260px; }
     #chatMsgs { flex: 1; overflow: auto; padding: .5rem; display: flex; flex-direction: column; gap: .45rem; }
     .msg { padding: .45rem .55rem; border-radius: 8px; font-size: .82rem; white-space: pre-wrap; }
     .msg.user { background: #1f4f7d; align-self: flex-end; }
     .msg.bot { background: #1f2733; border: 1px solid #2d3745; align-self: flex-start; }
     #promptRow { display: flex; flex-wrap: wrap; gap: .3rem; padding: .45rem; border-top: 1px solid var(--border); }
-    .prompt { font-size: .72rem; padding: .2rem .45rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); }
+    .prompt { font-size: .72rem; padding: .2rem .45rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); cursor: pointer; }
     #chatInputRow { display: flex; gap: .35rem; padding: .45rem; border-top: 1px solid var(--border); }
     #chatInput { flex: 1; padding: .42rem .5rem; border-radius: 8px; font-size: .8rem; }
-    #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-    #top { display: flex; align-items: center; gap: .4rem; border-bottom: 1px solid var(--border); background: var(--surface); padding: .5rem .7rem; }
-    .tab { padding: .3rem .65rem; font-size: .8rem; border: 1px solid var(--border); border-radius: 20px; background: transparent; color: var(--muted); }
+
+    /* ── Main panel ── */
+    #main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+    #top { display: flex; align-items: center; gap: .4rem; border-bottom: 1px solid var(--border); background: var(--surface); padding: .5rem .7rem; flex-shrink: 0; }
+    .tab { padding: .3rem .65rem; font-size: .8rem; border: 1px solid var(--border); border-radius: 20px; background: transparent; color: var(--muted); cursor: pointer; }
     .tab.active { background: var(--accent); color: #071622; border-color: var(--accent); }
-    #cyPanel { flex: 1; position: relative; }
-    #cy { width: 100%; height: 100%; }
+
+    /* Split panel: Architecture (left) + Workflow (right) */
+    #graphPanel { flex: 1; display: flex; min-height: 0; }
+    #archSide { flex: 1; display: flex; flex-direction: column; border-right: 1px solid var(--border); min-width: 0; }
+    #wfSide { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+    .panel-label {
+      text-align: center; padding: .25rem .5rem; font-size: .65rem;
+      text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+      border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0;
+    }
+    #cy { flex: 1; width: 100%; height: 100%; }
+    #wfCy { flex: 1; overflow: auto; position: relative; }
+
+    /* Flowchart tab */
     #flowPanel { display: none; flex: 1; overflow: auto; padding: 1rem; }
-    #flowPanel.active { display: block; }
-    #loading { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; place-items: center; color: var(--text); }
+
+    /* Loading overlay */
+    #loading { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; place-items: center; color: var(--text); font-size: 1rem; z-index: 999; }
     #loading.visible { display: grid; }
-    @media (max-width: 900px) { #app.visible { flex-direction: column; } #side { width: 100%; height: 55vh; border-right: none; border-bottom: 1px solid var(--border); } }
+
+    /* Workflow SVG animations */
+    @keyframes wfSlideIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes wfDraw { to { stroke-dashoffset: 0; } }
+    @keyframes wfFade { to { opacity: 1; } }
+
+    @media (max-width: 900px) {
+      #app.visible { flex-direction: column; }
+      #side { width: 100%; height: 50vh; border-right: none; border-bottom: 1px solid var(--border); }
+      #graphPanel { flex-direction: column; }
+      #archSide { border-right: none; border-bottom: 1px solid var(--border); }
+    }
   </style>
 </head>
 <body>
-  <section id="landing">
-    <div class="card">
-      <h1 class="logo">GitMap</h1>
-      <p class="tag">Sally frontend foundation, now with Daniela's onboarding + chatbot experience.</p>
-      <div class="steps">
-        <div class="step"><b>Step 1</b><div>Paste a GitHub URL.</div></div>
-        <div class="step"><b>Step 2</b><div>OpenAI maps architecture from REST-fetched code.</div></div>
-        <div class="step"><b>Step 3</b><div>Use onboarding + chat to get oriented fast.</div></div>
-      </div>
-      <div class="row">
-        <input id="urlInput" type="url" placeholder="https://github.com/owner/repo" />
-        <button class="primary" id="analyzeBtn">Analyze</button>
-      </div>
-      <div id="error"></div>
+
+<!-- ── Landing ── -->
+<section id="landing">
+  <canvas id="bgCanvas"></canvas>
+  <div class="hero">
+    <div class="hero-badge">AI-Powered Codebase Explorer</div>
+    <h1 class="logo">GitMap</h1>
+    <p class="hero-tagline">
+      Paste a GitHub URL. Get an interactive architecture map,<br>
+      animated workflow, and an AI you can ask anything.
+    </p>
+
+    <div class="search-bar">
+      <input id="urlInput" type="url" placeholder="https://github.com/owner/repo" />
+      <button id="analyzeBtn">Analyze →</button>
     </div>
-  </section>
+    <div id="error"></div>
 
-  <div id="app">
-    <aside id="side">
-      <div id="sideBody">
-        <div class="label">Overview</div>
-        <div id="summary">Analyze a repository to begin.</div>
+    <div class="feat-row">
+      <span class="feat"><span class="feat-dot" style="background:#58a6ff"></span>Architecture Graph</span>
+      <span class="feat"><span class="feat-dot" style="background:#3fb950"></span>Animated Workflow</span>
+      <span class="feat"><span class="feat-dot" style="background:#ffd700"></span>Full Map View</span>
+      <span class="feat"><span class="feat-dot" style="background:#ce93d8"></span>AI Chat</span>
+    </div>
 
-        <div class="label">Tech stack</div>
-        <div id="tech" class="chipRow"></div>
-
-        <div class="label">Onboarding path</div>
-        <div class="guide">
-          <ol id="guideList"></ol>
-        </div>
-
-        <div class="label">Selected node</div>
-        <div id="nodeDetail">Click any node for details.</div>
-
-        <div class="label">Ask AI about this repo</div>
-        <div id="chatBox">
-          <div id="chatMsgs">
-            <div class="msg bot">Ask about modules, entrypoints, or dependencies.</div>
-          </div>
-          <div id="promptRow"></div>
-          <div id="chatInputRow">
-            <input id="chatInput" placeholder="Where is the entry point?" />
-            <button id="sendBtn" class="primary" style="padding:.45rem .7rem;">Send</button>
-          </div>
-        </div>
+    <div class="how">
+      <div class="how-step">
+        <div class="how-num">01</div>
+        <b>Paste a URL</b>
+        <span>Any public GitHub repository</span>
       </div>
-      <div style="display:flex;gap:.4rem;padding:.6rem;border-top:1px solid var(--border);">
-        <button id="backBtn" class="ghost">New Search</button>
-        <button id="refreshBtn" class="ghost">Re-analyze</button>
+      <div class="how-divider">→</div>
+      <div class="how-step">
+        <div class="how-num">02</div>
+        <b>AI Reads the Code</b>
+        <span>GPT-4o maps modules &amp; data flow</span>
       </div>
-    </aside>
-    <main id="main">
-      <div id="top">
-        <button class="tab active" id="interactiveTab">Interactive</button>
-        <button class="tab" id="flowTab">Flowchart</button>
-        <span id="repoBadge" style="margin-left:auto;color:var(--muted);font-size:.8rem;"></span>
+      <div class="how-divider">→</div>
+      <div class="how-step">
+        <div class="how-num">03</div>
+        <b>Explore &amp; Ask</b>
+        <span>Interactive graph + AI chatbot</span>
       </div>
-      <div id="cyPanel"><div id="cy"></div></div>
-      <div id="flowPanel"><div class="mermaid" id="flowChart"></div></div>
-    </main>
+    </div>
   </div>
+</section>
 
-  <div id="loading">Analyzing repository...</div>
+<!-- ── App ── -->
+<div id="app">
+  <!-- Sidebar -->
+  <aside id="side">
+    <div id="sideBody">
+      <div class="label">Overview</div>
+      <div id="summary">Analyze a repository to begin.</div>
 
-  <script>
-    cytoscape.use(cytoscapeDagre);
-    mermaid.initialize({ startOnLoad: false, theme: "dark" });
-    const API = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
-      ? "http://127.0.0.1:8001/api"
-      : window.location.origin + "/api";
-    let currentUrl = "";
-    let currentAnalysis = null;
-    let cy = null;
+      <div class="label">Tech Stack</div>
+      <div id="tech" class="chipRow"></div>
 
-    const $ = (id) => document.getElementById(id);
-    const typeColor = (t) => ({
-      entrypoint: "#58a6ff", module: "#3fb950", service: "#d2a8ff", config: "#e3b341",
-      external: "#f78166", database: "#79c0ff", test: "#56d364"
-    }[(t || "").toLowerCase()] || "#8b949e");
+      <div class="label">Onboarding Path</div>
+      <div class="guide"><ol id="guideList"></ol></div>
 
-    function setLoading(v) { $("loading").classList.toggle("visible", v); }
-    function showError(msg) { $("error").textContent = msg || ""; }
+      <div class="label">Selected Node</div>
+      <div id="nodeDetail">Click any node for details.</div>
 
-    function setGuide(nodes, edges) {
-      const entry = nodes.find(n => (n.type || "").toLowerCase() === "entrypoint") || nodes[0];
-      const service = nodes.find(n => (n.type || "").toLowerCase() === "service") || nodes.find(n => (n.type || "").toLowerCase() === "module");
-      const db = nodes.find(n => ["database","external"].includes((n.type || "").toLowerCase()));
+      <div class="label">Node Color Guide</div>
+      <div id="colorLegend"></div>
+
+      <div class="label">Ask AI About This Repo</div>
+      <div id="chatBox">
+        <div id="chatMsgs">
+          <div class="msg bot">Ask about modules, entrypoints, or dependencies.</div>
+        </div>
+        <div id="promptRow"></div>
+        <div id="chatInputRow">
+          <input id="chatInput" placeholder="Where is the entry point?" />
+          <button id="sendBtn" class="primary" style="padding:.45rem .7rem;">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:.4rem;padding:.6rem;border-top:1px solid var(--border);flex-shrink:0;">
+      <button id="backBtn" class="ghost">New Search</button>
+      <button id="refreshBtn" class="ghost">Re-analyze</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main id="main">
+    <div id="top">
+      <button class="tab active" id="graphTab">Graph View</button>
+      <button class="tab" id="flowTab">Full Map</button>
+      <span id="repoBadge" style="margin-left:auto;color:var(--muted);font-size:.8rem;"></span>
+    </div>
+
+    <!-- Split panel: Architecture (left) + Workflow (right) -->
+    <div id="graphPanel">
+      <div id="archSide">
+        <div class="panel-label">Architecture — module dependencies</div>
+        <div id="cy"></div>
+      </div>
+      <div id="wfSide">
+        <div class="panel-label">Workflow — runtime execution steps</div>
+        <div id="wfCy"></div>
+      </div>
+    </div>
+
+    <!-- Flowchart (separate tab) -->
+    <div id="flowPanel">
+      <div class="mermaid" id="flowChart"></div>
+    </div>
+  </main>
+</div>
+
+<div id="loading">Analyzing repository…</div>
+
+<script>
+  cytoscape.use(cytoscapeDagre);
+  mermaid.initialize({ startOnLoad: false, theme: "dark" });
+
+  const API = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+    ? "http://127.0.0.1:8001/api"
+    : window.location.origin + "/api";
+
+  let currentUrl = "";
+  let currentAnalysis = null;
+  let cy = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  // ── Node type metadata ──────────────────────────────────────────
+  const TYPE_META = {
+    entrypoint: { color: "#ffd700", shape: "diamond",        desc: "Main entry point / app root" },
+    module:     { color: "#4fc3f7", shape: "round-rectangle", desc: "Core feature or logic module" },
+    service:    { color: "#ce93d8", shape: "round-rectangle", desc: "API route or backend service" },
+    config:     { color: "#ffb74d", shape: "round-rectangle", desc: "Configuration or settings" },
+    external:   { color: "#ef9a9a", shape: "ellipse",         desc: "Third-party API or library" },
+    database:   { color: "#4db6ac", shape: "barrel",          desc: "Data storage / cache layer" },
+    test:       { color: "#fff176", shape: "round-rectangle", desc: "Test files or test suite" },
+  };
+  const typeColor = (t) => (TYPE_META[(t||"").toLowerCase()] || {}).color || "#8b949e";
+  const typeShape = (t) => (TYPE_META[(t||"").toLowerCase()] || {}).shape || "round-rectangle";
+
+  // ── Legend ──────────────────────────────────────────────────────
+  function renderLegend() {
+    $("colorLegend").innerHTML = Object.entries(TYPE_META).map(([type, m]) => `
+      <div class="legend-item">
+        <span class="legend-dot" style="background:${m.color}"></span>
+        <span class="legend-name" style="color:${m.color}">${type}</span>
+        <span class="legend-desc">${m.desc}</span>
+      </div>
+    `).join("");
+  }
+  renderLegend();
+
+  // ── Utilities ───────────────────────────────────────────────────
+  function setLoading(v) { $("loading").classList.toggle("visible", v); }
+  function showError(msg) { $("error").textContent = msg || ""; }
+
+  function setGuide(nodes, edges) {
+    const entry   = nodes.find(n => (n.type||"").toLowerCase() === "entrypoint") || nodes[0];
+    const service = nodes.find(n => (n.type||"").toLowerCase() === "service")
+                 || nodes.find(n => (n.type||"").toLowerCase() === "module");
+    const db      = nodes.find(n => ["database","external"].includes((n.type||"").toLowerCase()));
+    const lines   = [];
+    if (entry)                   lines.push(`Start at <b>${entry.label}</b>.`);
+    if (service && service !== entry) lines.push(`Then read <b>${service.label}</b> for core behavior.`);
+    if (db)                      lines.push(`Inspect <b>${db.label}</b> for data flow.`);
+    const core = (edges||[]).slice(0,2).map(e => `${e.source} → ${e.target}`);
+    if (core.length)             lines.push(`Key links: ${core.join(", ")}.`);
+    $("guideList").innerHTML = lines.map(x => `<li>${x}</li>`).join("");
+  }
+
+  function renderSidebar(data) {
+    $("summary").textContent    = data.summary || "No summary.";
+    $("repoBadge").textContent  = data.repo    || "";
+    $("tech").innerHTML         = (data.tech_stack||[]).map(t => `<span class="chip">${t}</span>`).join("");
+    setGuide(data.nodes||[], data.edges||[]);
+  }
+
+  // ── Architecture graph (Cytoscape) ──────────────────────────────
+  function renderGraph(data) {
+    const elements = [
+      ...(data.nodes||[]).map(n => ({ data: {
+        id: n.id, label: n.label, type: n.type,
+        description: n.description, files: n.files||[],
+        color: typeColor(n.type), shape: typeShape(n.type)
+      }})),
+      ...(data.edges||[]).map((e,i) => ({ data: {
+        id: `e_${i}`, source: e.source, target: e.target,
+        label: e.label||"", edge_type: e.edge_type||""
+      }})),
+    ];
+    if (cy) cy.destroy();
+    cy = cytoscape({
+      container: $("cy"),
+      elements,
+      style: [
+        { selector: "node", style: {
+          "background-color":"data(color)", "label":"data(label)",
+          "text-valign":"center", "text-halign":"center",
+          "text-wrap":"wrap", "text-max-width":"110px",
+          "font-size":"11px", "color":"#0d1117",
+          "shape":"data(shape)", "padding":"10px",
+          "width":"label", "height":"label",
+          "border-width":2, "border-color":"data(color)",
+          "font-weight":"600"
+        }},
+        { selector: "node:selected", style: { "border-width":3, "border-color":"#fff" }},
+        { selector: "edge", style: {
+          "curve-style":"bezier", "target-arrow-shape":"triangle",
+          "line-color":"#4d5566", "target-arrow-color":"#4d5566",
+          "width":1.8, "label":"data(label)", "font-size":"8px", "color":"#8b949e"
+        }},
+        { selector: "edge[edge_type='imports']", style: {
+          "line-color":"#ffd700", "target-arrow-color":"#ffd700",
+          "width":2, "line-style":"dashed"
+        }},
+      ],
+      layout: { name:"dagre", rankDir:"TB", rankSep:90, nodeSep:60, animate:true, padding:40 }
+    });
+    cy.on("tap", "node", (evt) => {
+      const d = evt.target.data();
+      const pathLine = (d.id && d.id !== "root" && d.id !== d.label)
+        ? `<div style="font-family:monospace;font-size:.72rem;color:var(--muted);margin-bottom:.3rem;word-break:break-all">${d.id}</div>`
+        : "";
+      $("nodeDetail").innerHTML = `
+        ${pathLine}
+        <b>${d.label}</b>
+        <div style="margin:.2rem 0;color:${typeColor(d.type)};font-size:.75rem">${d.type||"module"}</div>
+        <div style="color:var(--muted);font-size:.8rem;margin-top:.25rem">${d.description||""}</div>
+      `;
+    });
+  }
+
+  // ── Animated Workflow (SVG, clean arrow style) ──────────────────
+  function renderWorkflow(data) {
+    const wfNodes = (data.workflow_nodes||[]).sort((a,b) => (a.step||0)-(b.step||0));
+    const wfEdges = (data.workflow_edges||[]);
+    const container = $("wfCy");
+
+    if (!wfNodes.length) {
+      container.innerHTML = `<p style="color:var(--muted);padding:1.5rem;text-align:center">
+        No workflow data — re-analyze the repo to generate this view.</p>`;
+      return;
+    }
+
+    // ── Layout constants ──
+    const NW      = 240;   // node width
+    const PAD_X   = 20;
+    const PAD_Y   = 20;
+    const VG      = 36;    // vertical gap between nodes
+    const ARROW_H = 22;    // height consumed by arrowhead inside the gap
+    const CHARS   = 36;    // chars per description line
+    const LH      = 13;    // line height for description
+    const FILE_LH = 13;    // line height for file entries
+    const SVG_W   = NW + PAD_X * 2;
+
+    // Escape SVG text
+    const esc = s => (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+    // Wrap text into lines of maxChars
+    function wrapText(text, maxChars) {
+      if (!text) return [];
+      const words = text.split(" ");
       const lines = [];
-      if (entry) lines.push(`Start at ${entry.label}.`);
-      if (service && service !== entry) lines.push(`Then read ${service.label} for core behavior.`);
-      if (db) lines.push(`Finally inspect ${db.label} for data/integration flow.`);
-      const core = (edges || []).slice(0, 2).map(e => `${e.source} -> ${e.target}`);
-      if (core.length) lines.push(`Core links: ${core.join(", ")}.`);
-      $("guideList").innerHTML = lines.map(x => `<li>${x}</li>`).join("");
+      let cur = "";
+      for (const w of words) {
+        const trial = cur ? cur + " " + w : w;
+        if (trial.length <= maxChars) { cur = trial; }
+        else { if (cur) lines.push(cur); cur = w; }
+      }
+      if (cur) lines.push(cur);
+      return lines;
     }
 
-    function renderSidebar(data) {
-      $("summary").textContent = data.summary || "No summary.";
-      $("repoBadge").textContent = data.repo || "";
-      $("tech").innerHTML = (data.tech_stack || []).map(t => `<span class="chip">${t}</span>`).join("");
-      setGuide(data.nodes || [], data.edges || []);
-    }
+    // Pre-compute layout for each node
+    const TOP_PAD   = 12;
+    const LABEL_H   = 22;
+    const DESC_GAP  = 6;
+    const FILE_GAP  = 8;
+    const BADGE_H   = 16;
+    const BOT_PAD   = 10;
 
-    function renderGraph(data) {
-      const elements = [
-        ...(data.nodes || []).map(n => ({ data: { id: n.id, label: n.label, type: n.type, description: n.description, files: n.files || [], color: typeColor(n.type) } })),
-        ...(data.edges || []).map((e, i) => ({ data: { id: `e_${i}`, source: e.source, target: e.target, label: e.label || "" } })),
-      ];
-      if (cy) cy.destroy();
-      cy = cytoscape({
-        container: $("cy"),
-        elements,
-        style: [
-          { selector: "node", style: { "background-color":"data(color)", "label":"data(label)", "text-valign":"center", "text-halign":"center", "text-wrap":"wrap", "text-max-width":"110px", "font-size":"11px", "color":"#e6edf3", "shape":"round-rectangle", "padding":"10px", "width":"label", "height":"label", "border-width":2, "border-color":"#30363d" } },
-          { selector: "edge", style: { "curve-style":"bezier", "target-arrow-shape":"triangle", "line-color":"#3d4653", "target-arrow-color":"#3d4653", "width":1.6, "label":"data(label)", "font-size":"8px", "color":"#8b949e" } }
-        ],
-        layout: { name: "dagre", rankDir: "TB", rankSep: 95, nodeSep: 65, animate: true, padding: 40 }
+    const info = wfNodes.map(n => {
+      const descLines = wrapText(n.description || "", CHARS);
+      const files     = (n.files || []).slice(0, 3).map(f => f.split("/").pop());
+      const h = TOP_PAD + LABEL_H + DESC_GAP
+              + Math.max(descLines.length, 1) * LH
+              + (files.length ? FILE_GAP + files.length * FILE_LH : 0)
+              + BADGE_H + BOT_PAD;
+      return { ...n, descLines, files, h };
+    });
+
+    // Assign y positions
+    let yOff = PAD_Y;
+    const pos = {};
+    info.forEach(n => {
+      pos[n.id] = { x: PAD_X, y: yOff, cx: PAD_X + NW / 2, h: n.h };
+      yOff += n.h + VG;
+    });
+    const SVG_H = yOff - VG + PAD_Y;
+
+    // ── Connectors: clean gray line + filled downward triangle ──
+    let connSVG = "";
+    info.forEach((n, i) => {
+      if (i === 0) return;
+      const prev = info[i - 1];
+      const pp   = pos[prev.id];
+      const cp   = pos[n.id];
+      const cx   = PAD_X + NW / 2;
+      const y1   = pp.y + pp.h;          // bottom of previous node
+      const y2   = cp.y;                  // top of current node
+      const ym   = y1 + (y2 - y1) * 0.6; // stop line before arrowhead
+      const arrTop = y2 - ARROW_H;
+      const delay  = (i - 1) * 0.38 + 0.25;
+
+      // Vertical line
+      const lineLen = ym - y1;
+      connSVG += `
+        <line x1="${cx}" y1="${y1}" x2="${cx}" y2="${ym}"
+          stroke="#6e7681" stroke-width="2"
+          stroke-dasharray="${lineLen}" stroke-dashoffset="${lineLen}"
+          style="animation:wfDraw 0.3s ${delay}s ease-out forwards"/>
+      `;
+
+      // Edge label (from wfEdges, if matching)
+      const edge = wfEdges.find(e => e.source === prev.id && e.target === n.id);
+      if (edge && edge.label) {
+        connSVG += `
+          <text x="${cx + 8}" y="${(y1 + y2) / 2}" fill="#6e7681" font-size="8"
+            font-family="Segoe UI,system-ui,sans-serif" opacity="0"
+            style="animation:wfFade 0.25s ${delay + 0.2}s forwards">${esc(edge.label)}</text>
+        `;
+      }
+
+      // Filled downward triangle (arrowhead)
+      connSVG += `
+        <polygon points="${cx},${y2} ${cx - 8},${arrTop} ${cx + 8},${arrTop}"
+          fill="#6e7681" opacity="0"
+          style="animation:wfFade 0.2s ${delay + 0.28}s ease forwards"/>
+      `;
+    });
+
+    // ── Node boxes ──
+    let nodesSVG = "";
+    info.forEach((n, i) => {
+      const p     = pos[n.id];
+      const col   = typeColor(n.type);
+      const delay = i * 0.38;
+      const label = (n.step ? `${n.step}. ` : "") + esc(n.label || n.id);
+      const safeD = JSON.stringify({ label: n.step ? `${n.step}. ${n.label}` : n.label,
+                                     type: n.type, description: n.description || "" })
+                      .replace(/"/g, "&quot;");
+
+      let yc = p.y + TOP_PAD;
+
+      // Box rect
+      nodesSVG += `
+        <g style="opacity:0;animation:wfSlideIn 0.4s ${delay}s ease-out forwards;cursor:pointer"
+           onclick='wfNodeTap(${safeD})'>
+          <rect x="${p.x}" y="${p.y}" width="${NW}" height="${p.h}" rx="10"
+            fill="#161b22" stroke="${col}" stroke-width="2"/>
+      `;
+
+      // Step label
+      yc += LABEL_H - 4;
+      nodesSVG += `
+          <text x="${p.cx}" y="${yc}" text-anchor="middle"
+            fill="${col}" font-size="11.5" font-weight="700"
+            font-family="Segoe UI,system-ui,sans-serif">${label}</text>
+      `;
+      yc += DESC_GAP;
+
+      // Description lines
+      n.descLines.forEach(line => {
+        yc += LH;
+        nodesSVG += `
+          <text x="${p.cx}" y="${yc}" text-anchor="middle"
+            fill="#8b949e" font-size="8.5" font-family="Segoe UI,system-ui,sans-serif">${esc(line)}</text>
+        `;
       });
-      cy.on("tap", "node", (evt) => {
-        const d = evt.target.data();
-        const files = (d.files || []).slice(0, 5).map(f => `<div>• ${f}</div>`).join("");
-        $("nodeDetail").innerHTML = `<b>${d.label}</b><div style="margin:.25rem 0;color:${typeColor(d.type)}">${d.type || "module"}</div><div style="color:var(--muted)">${d.description || ""}</div>${files}`;
-      });
+
+      // Files
+      if (n.files.length) {
+        yc += FILE_GAP;
+        n.files.forEach(fname => {
+          yc += FILE_LH;
+          nodesSVG += `
+            <text x="${p.x + 14}" y="${yc}"
+              fill="#58a6ff" font-size="8" font-family="monospace">&#128196; ${esc(fname)}</text>
+          `;
+        });
+      }
+
+      // Type badge
+      yc += BADGE_H;
+      nodesSVG += `
+          <text x="${p.cx}" y="${yc}" text-anchor="middle"
+            fill="${col}" font-size="7.5" opacity=".5"
+            font-family="Segoe UI,system-ui,sans-serif">${n.type || "module"}</text>
+        </g>
+      `;
+    });
+
+    container.innerHTML = `
+      <div style="display:flex;justify-content:center;padding:1rem;overflow:auto;height:100%;box-sizing:border-box">
+        <svg viewBox="0 0 ${SVG_W} ${SVG_H}" xmlns="http://www.w3.org/2000/svg"
+          width="${SVG_W}" style="flex-shrink:0;height:${SVG_H}px">
+          <rect width="${SVG_W}" height="${SVG_H}" fill="#0d1117"/>
+          ${connSVG}
+          ${nodesSVG}
+        </svg>
+      </div>
+    `;
+  }
+
+  function wfNodeTap(d) {
+    $("nodeDetail").innerHTML = `
+      <b>${d.label}</b>
+      <div style="margin:.2rem 0;color:${typeColor(d.type)};font-size:.75rem">${d.type}</div>
+      <div style="color:var(--muted);font-size:.8rem">${d.description}</div>
+    `;
+  }
+
+  // ── Full Map (Mermaid, complete architecture with solid type colors) ──
+  async function renderFlow(data) {
+    // Use the full architecture graph (all modules the AI identified)
+    const nodes = (data.nodes || []);
+    const edges = (data.edges || []);
+
+    if (!nodes.length) {
+      $("flowChart").innerHTML = `<p style="color:var(--muted)">No data — re-analyze the repo.</p>`;
+      return;
     }
 
-    async function renderFlow(data) {
-      const lines = ["flowchart TD"];
-      (data.nodes || []).forEach(n => lines.push(`${n.id.replace(/[^a-zA-Z0-9_]/g,"_")}["${(n.label || n.id).replace(/"/g,"'")}"]`));
-      (data.edges || []).forEach(e => lines.push(`${e.source.replace(/[^a-zA-Z0-9_]/g,"_")} --> ${e.target.replace(/[^a-zA-Z0-9_]/g,"_")}`));
-      const def = lines.join("\n");
-      const { svg } = await mermaid.render("m" + Date.now(), def);
+    const safeId = s => (s||"").replace(/[^a-zA-Z0-9_]/g, "_");
+    const esc    = s => (s||"").replace(/"/g, "'").replace(/[<>\[\]]/g, "");
+
+    // Solid plain fills — same hue as the legend, dark text for contrast
+    const SOLID = {
+      entrypoint: "fill:#ffd700,stroke:#b39700,color:#0d1117",
+      module:     "fill:#4fc3f7,stroke:#2a9fd6,color:#0d1117",
+      service:    "fill:#ce93d8,stroke:#9a60b0,color:#0d1117",
+      config:     "fill:#ffb74d,stroke:#c07820,color:#0d1117",
+      external:   "fill:#ef9a9a,stroke:#c05050,color:#0d1117",
+      database:   "fill:#4db6ac,stroke:#2a8a80,color:#0d1117",
+      test:       "fill:#fff176,stroke:#b0a800,color:#0d1117",
+    };
+
+    const lines = ["flowchart TD"];
+
+    // Nodes — shape varies by type
+    nodes.forEach(n => {
+      const id    = safeId(n.id);
+      const label = esc(n.label || n.id);
+      const type  = (n.type || "module").toLowerCase();
+      if (type === "database")   lines.push(`  ${id}[("${label}")]`);
+      else if (type === "entrypoint") lines.push(`  ${id}(["${label}"])`);
+      else if (type === "external")   lines.push(`  ${id}("${label}")`);
+      else                            lines.push(`  ${id}["${label}"]`);
+    });
+
+    // Edges — dashed for import/dependency, solid for containment
+    edges.forEach(e => {
+      const s   = safeId(e.source), t = safeId(e.target);
+      const imp = (e.edge_type || "") === "imports";
+      // Skip "uses" labels to keep the map clean
+      lines.push(imp ? `  ${s} -.-> ${t}` : `  ${s} --> ${t}`);
+    });
+
+    // Solid color styles
+    nodes.forEach(n => {
+      const style = SOLID[(n.type||"module").toLowerCase()] || SOLID.module;
+      lines.push(`  style ${safeId(n.id)} ${style}`);
+    });
+
+    const def = lines.join("\n");
+    try {
+      const { svg } = await mermaid.render("mfm" + Date.now(), def);
       $("flowChart").innerHTML = svg;
+    } catch(err) {
+      $("flowChart").innerHTML = `<pre style="color:var(--muted);font-size:.78rem;overflow:auto">${def}</pre>`;
     }
+  }
 
-    function addMessage(role, text) {
-      const node = document.createElement("div");
-      node.className = `msg ${role}`;
-      node.textContent = text;
-      $("chatMsgs").appendChild(node);
-      $("chatMsgs").scrollTop = $("chatMsgs").scrollHeight;
+  // ── Tab switching ───────────────────────────────────────────────
+  function showTab(active) {
+    $("graphTab").classList.toggle("active", active === "graphTab");
+    $("flowTab").classList.toggle("active",  active === "flowTab");
+    $("graphPanel").style.display = active === "graphTab" ? "flex" : "none";
+    $("flowPanel").style.display  = active === "flowTab"  ? "block": "none";
+    if (active === "graphTab" && cy) cy.resize().fit();
+  }
+  $("graphTab").onclick = () => showTab("graphTab");
+  $("flowTab").onclick  = () => showTab("flowTab");
+
+  // ── Chat ────────────────────────────────────────────────────────
+  function addMessage(role, text) {
+    const node = document.createElement("div");
+    node.className = `msg ${role}`;
+    node.textContent = text;
+    $("chatMsgs").appendChild(node);
+    $("chatMsgs").scrollTop = $("chatMsgs").scrollHeight;
+  }
+
+  async function loadPrompts() {
+    try {
+      const res = await fetch(`${API}/example-questions`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const prompts = Array.isArray(data.questions) ? data.questions : [];
+      $("promptRow").innerHTML = prompts.map(p => `<button class="prompt">${p}</button>`).join("");
+      Array.from($("promptRow").querySelectorAll(".prompt")).forEach(b => {
+        b.onclick = () => { $("chatInput").value = b.textContent; sendChat(); };
+      });
+    } catch(_) {}
+  }
+
+  async function sendChat() {
+    const message = $("chatInput").value.trim();
+    if (!message || !currentUrl) return;
+    $("chatInput").value = "";
+    addMessage("user", message);
+    try {
+      const res = await fetch(`${API}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ github_url: currentUrl, message }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Chat failed.");
+      addMessage("bot", data.answer || "(No response)");
+    } catch(e) {
+      addMessage("bot", `Could not get answer: ${e.message}`);
     }
+  }
 
-    async function loadPrompts() {
-      try {
-        const res = await fetch(`${API}/example-questions`);
-        if (!res.ok) return;
-        const data = await res.json();
-        const prompts = Array.isArray(data.questions) ? data.questions : [];
-        $("promptRow").innerHTML = prompts.map(p => `<button class="prompt">${p}</button>`).join("");
-        Array.from($("promptRow").querySelectorAll(".prompt")).forEach((b) => {
-          b.onclick = () => { $("chatInput").value = b.textContent; sendChat(); };
-        });
-      } catch {}
+  // ── Analyze ────────────────────────────────────────────────────
+  async function analyze(refresh = false) {
+    const url = $("urlInput").value.trim();
+    if (!url) { showError("Please paste a GitHub URL."); return; }
+    currentUrl = url;
+    showError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ github_url: url, refresh }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Analyze failed.");
+      currentAnalysis = data;
+      $("landing").style.display = "none";
+      $("app").classList.add("visible");
+      showTab("graphTab");
+      renderSidebar(data);
+      renderGraph(data);
+      renderWorkflow(data);
+      await renderFlow(data);
+    } catch(e) {
+      showError(e.message);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    async function sendChat() {
-      const message = $("chatInput").value.trim();
-      if (!message || !currentUrl) return;
-      $("chatInput").value = "";
-      addMessage("user", message);
-      try {
-        const res = await fetch(`${API}/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ github_url: currentUrl, message })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Chat request failed.");
-        addMessage("bot", data.answer || "(No response)");
-      } catch (e) {
-        addMessage("bot", `Could not get answer: ${e.message}`);
+  $("analyzeBtn").onclick  = () => analyze(false);
+  $("refreshBtn").onclick  = () => analyze(true);
+  $("backBtn").onclick     = () => { $("app").classList.remove("visible"); $("landing").style.display = ""; };
+  $("sendBtn").onclick     = sendChat;
+  $("chatInput").addEventListener("keydown",  e => { if (e.key === "Enter") sendChat(); });
+  $("urlInput").addEventListener("keydown",   e => { if (e.key === "Enter") analyze(false); });
+
+  loadPrompts();
+  $("urlInput").value = "https://github.com/tiangolo/fastapi";
+
+  // ── Animated background: floating graph nodes ────────────────────
+  (function initBg() {
+    const canvas = $("bgCanvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const COLORS = ["#58a6ff","#3fb950","#ffd700","#ce93d8","#4db6ac","#ef9a9a"];
+
+    function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+    resize();
+    window.addEventListener("resize", resize);
+
+    const N = 22;
+    const nodes = Array.from({length: N}, () => ({
+      x:  Math.random() * window.innerWidth,
+      y:  Math.random() * window.innerHeight,
+      vx: (Math.random() - .5) * .35,
+      vy: (Math.random() - .5) * .35,
+      r:  Math.random() * 2.5 + 1.5,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+    }));
+
+    function tick() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Update positions
+      nodes.forEach(n => {
+        n.x += n.vx; n.y += n.vy;
+        if (n.x < 0 || n.x > canvas.width)  n.vx *= -1;
+        if (n.y < 0 || n.y > canvas.height) n.vy *= -1;
+      });
+
+      // Edges between nearby nodes
+      for (let i = 0; i < N; i++) {
+        for (let j = i + 1; j < N; j++) {
+          const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
+          const d  = Math.sqrt(dx*dx + dy*dy);
+          if (d < 170) {
+            ctx.beginPath();
+            ctx.moveTo(nodes[i].x, nodes[i].y);
+            ctx.lineTo(nodes[j].x, nodes[j].y);
+            ctx.strokeStyle = `rgba(88,166,255,${.1 * (1 - d/170)})`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        }
       }
+
+      // Node dots
+      nodes.forEach(n => {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.fillStyle = n.color + "55";
+        ctx.fill();
+      });
+
+      requestAnimationFrame(tick);
     }
-
-    async function analyze(refresh = false) {
-      const url = $("urlInput").value.trim();
-      if (!url) { showError("Please paste a GitHub URL."); return; }
-      currentUrl = url;
-      showError("");
-      setLoading(true);
-      try {
-        const res = await fetch(`${API}/analyze`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ github_url: url, refresh })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Analyze failed.");
-        currentAnalysis = data;
-        $("landing").style.display = "none";
-        $("app").classList.add("visible");
-        renderSidebar(data);
-        renderGraph(data);
-        await renderFlow(data);
-      } catch (e) {
-        showError(e.message);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    $("analyzeBtn").onclick = () => analyze(false);
-    $("refreshBtn").onclick = () => analyze(true);
-    $("backBtn").onclick = () => { $("app").classList.remove("visible"); $("landing").style.display = ""; };
-    $("sendBtn").onclick = sendChat;
-    $("chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChat(); });
-    $("urlInput").addEventListener("keydown", (e) => { if (e.key === "Enter") analyze(false); });
-
-    $("interactiveTab").onclick = () => {
-      $("interactiveTab").classList.add("active");
-      $("flowTab").classList.remove("active");
-      $("cyPanel").style.display = "";
-      $("flowPanel").classList.remove("active");
-    };
-    $("flowTab").onclick = () => {
-      $("flowTab").classList.add("active");
-      $("interactiveTab").classList.remove("active");
-      $("cyPanel").style.display = "none";
-      $("flowPanel").classList.add("active");
-    };
-
-    loadPrompts();
-    $("urlInput").value = "https://github.com/tiangolo/fastapi";
-  </script>
+    tick();
+  })();
+</script>
 </body>
 </html>
