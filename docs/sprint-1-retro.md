@@ -26,3 +26,4 @@ For Sprint 2, the team is committing to refining both our AI responses and our i
 Kanban Links:
 Sally: https://github.com/CSEN-SCU/csen-174-s26-team-project-codebase-explainer/issues/24
 Jesse: https://github.com/CSEN-SCU/csen-174-s26-team-project-codebase-explainer/issues/25
+Kanban not public, need to change that somehow
