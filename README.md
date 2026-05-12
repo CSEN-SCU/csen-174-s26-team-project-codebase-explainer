@@ -4,7 +4,7 @@
 
 **Team:** Sally Kim · Jesse · Daniela
 
-🔗 **Live demo:** [https://csen-174-s26-team-project-codebase-zufu.onrender.com](https://csen-174-s26-team-project-codebase-zufu.onrender.com)
+🔗 **Live demo:** 
 
 ---
 
