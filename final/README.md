@@ -14,7 +14,6 @@ This folder is the current final prototype:
 - `backend/.env.example` - required environment variables.
 - `frontend/index.html` - final frontend (served statically).
 - `example_questions.py` - single source of example prompt strings for final.
-- `test_final_prompts.py` - unit tests for final prompt function.
 
 ## Run final app
 
@@ -41,13 +40,7 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173).
 
 ## Testing
 
-- Final prompt tests:
-
-```bash
-python3 -m pytest final/test_final_prompts.py -v
-```
-
-- unitTesting suite (now wired to final backend):
+Tests live in `unitTesting/` (wired to this final backend), including example-question prompts in `test_example_questions.py`:
 
 ```bash
 cd unitTesting

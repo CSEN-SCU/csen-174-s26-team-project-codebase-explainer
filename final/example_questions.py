@@ -1,3 +1,8 @@
+MAX_EXAMPLES = 10
+
+AUTH_PROMPT = "How is authentication and authorization handled in this repo?"
+
+
 def get_example_questions(repo_data):
     """Return starter prompts a student can ask about a repository."""
     examples = [
@@ -19,9 +24,13 @@ def get_example_questions(repo_data):
 
     seen_types = set()
     for node in repo_data.get("nodes", []):
-        node_type = node.get("type")
+        node_type = (node.get("type") or "").lower()
         if node_type in type_to_prompt and node_type not in seen_types:
             examples.append(type_to_prompt[node_type])
             seen_types.add(node_type)
 
-    return list(dict.fromkeys(examples))
+        label = (node.get("label") or "").lower()
+        if "auth" in label and AUTH_PROMPT not in examples:
+            examples.append(AUTH_PROMPT)
+
+    return list(dict.fromkeys(examples))[:MAX_EXAMPLES]
