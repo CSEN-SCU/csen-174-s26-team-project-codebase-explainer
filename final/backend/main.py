@@ -17,14 +17,37 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# Trusted browser origins for local dev (static server on 5173, API/UI on 8001).
+DEFAULT_CORS_ORIGINS = (
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "http://127.0.0.1:8001",
+    "http://localhost:8001",
+)
+
+
+def get_cors_origins() -> list[str]:
+    """Explicit allowlist; extend via comma-separated CORS_ORIGINS in .env for deployment."""
+    origins: list[str] = []
+    for origin in DEFAULT_CORS_ORIGINS:
+        if origin not in origins:
+            origins.append(origin)
+    extra = os.getenv("CORS_ORIGINS", "")
+    for origin in extra.split(","):
+        origin = origin.strip().rstrip("/")
+        if origin and origin not in origins:
+            origins.append(origin)
+    return origins
+
+
 init_db()
 app = FastAPI(title="GitMap API — Final (OpenAI)")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=get_cors_origins(),
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
