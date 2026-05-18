@@ -35,13 +35,9 @@ async def test_chat_requires_analysis_first(app):
     assert "analyze" in response.json()["detail"].lower()
 
 
-@pytest.mark.skip(
-    reason="Deferred to a later sprint: update test to POST /api/chat with message body and mock chat_about_repo for deterministic grounded answers."
-)
 @pytest.mark.asyncio
 async def test_chat_returns_answer_with_cache(app, tmp_db):
     # As a user, chat returns an answer grounded in the cached analysis.
-    # RED — stays failing until Daniela implements the real OpenAI call in chat.py.
     # Arrange
     graph = {
         "summary": "A FastAPI backend for ML predictions.",
@@ -50,12 +46,19 @@ async def test_chat_returns_answer_with_cache(app, tmp_db):
         "edges": [],
     }
     database.save_analysis("owner", "ml-api", "https://github.com/owner/ml-api", graph)
-    # Action
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.post(
-            "/chat",
-            json={"github_url": "https://github.com/owner/ml-api", "question": "What framework?"},
-        )
+    with patch(
+        "main.chat_about_repo",
+        new=AsyncMock(return_value="This project uses FastAPI for its HTTP API."),
+    ):
+        # Action
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/chat",
+                json={
+                    "github_url": "https://github.com/owner/ml-api",
+                    "message": "What framework?",
+                },
+            )
     # Assert
     assert response.status_code == 200
     assert "FastAPI" in response.json()["answer"]

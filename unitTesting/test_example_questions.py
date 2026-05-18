@@ -1,8 +1,6 @@
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_QUESTIONS_PATH = REPO_ROOT / "final" / "example_questions.py"
 
@@ -51,9 +49,6 @@ def test_returns_no_duplicate_prompts_when_node_types_repeat():
     assert len(examples) == len(set(examples))
 
 
-@pytest.mark.skip(
-    reason="Deferred to a later sprint: normalize node type matching to be case-insensitive."
-)
 def test_node_types_are_handled_case_insensitively():
     repo_data = {"nodes": [{"type": "Service", "label": "API"}]}
 
@@ -62,9 +57,6 @@ def test_node_types_are_handled_case_insensitively():
     assert "Which services are core to this architecture?" in examples
 
 
-@pytest.mark.skip(
-    reason="Deferred to a later sprint: add auth-specific example prompts from node labels."
-)
 def test_auth_related_nodes_add_security_question():
     repo_data = {"nodes": [{"type": "module", "label": "Authentication Module"}]}
 
@@ -73,9 +65,6 @@ def test_auth_related_nodes_add_security_question():
     assert "How is authentication and authorization handled in this repo?" in examples
 
 
-@pytest.mark.skip(
-    reason="Deferred to a later sprint: cap example question list length (e.g. max 10 prompts)."
-)
 def test_example_questions_are_capped_to_ten():
     repo_data = {
         "nodes": [

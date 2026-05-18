@@ -12,7 +12,9 @@ import re
 import json
 from openai import AsyncOpenAI
 
-client = AsyncOpenAI()
+
+def _client() -> AsyncOpenAI:
+    return AsyncOpenAI()
 
 # ── Noise filters ──────────────────────────────────────────────────────────────
 IGNORE_DIRS = {
@@ -206,7 +208,7 @@ async def _ai_analyze(repo_data: dict, tree_str: str) -> dict:
     )
 
     try:
-        response = await client.chat.completions.create(
+        response = await _client().chat.completions.create(
             model="gpt-4o",
             max_tokens=2048,
             response_format={"type": "json_object"},

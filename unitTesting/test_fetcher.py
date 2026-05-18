@@ -6,6 +6,7 @@ Unit tests for final/backend fetch + database seams.
 import pytest
 import main
 import database
+from fetcher import github_fetcher
 
 
 # ── parse_github_url ───────────────────────────────────────────────────────────
@@ -65,7 +66,7 @@ def test_select_files_prioritises_readme():
         {"path": "src/utils.py", "type": "blob"},
     ]
     # Action
-    selected = main._fetcher_module.select_files_to_read(tree)
+    selected = github_fetcher.select_files_to_read(tree)
     # Assert
     assert "README.md" in selected
     assert selected.index("README.md") < selected.index("src/models.py")
@@ -76,7 +77,7 @@ def test_select_files_respects_max_limit():
     # Arrange — generate 50 fake Python files
     tree = [{"path": f"src/module_{i}.py", "type": "blob"} for i in range(50)]
     # Action
-    selected = main._fetcher_module.select_files_to_read(tree)
+    selected = github_fetcher.select_files_to_read(tree)
     # Assert
     assert len(selected) <= 25
 
@@ -90,7 +91,7 @@ def test_select_files_excludes_non_readable():
         {"path": "binary.exe", "type": "blob"},
     ]
     # Action
-    selected = main._fetcher_module.select_files_to_read(tree)
+    selected = github_fetcher.select_files_to_read(tree)
     # Assert
     assert "image.png" not in selected
     assert "binary.exe" not in selected
