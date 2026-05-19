@@ -109,8 +109,11 @@
     #promptRow { display: flex; flex-wrap: wrap; gap: .3rem; padding: .45rem; border-top: 1px solid var(--border); }
     .prompt { font-size: .72rem; padding: .2rem .45rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); cursor: pointer; transition: background .15s, color .15s; }
     .prompt:hover { background: var(--accent); color: #071622; border-color: var(--accent); }
+    .prompt:disabled { opacity: 0.5; cursor: wait; }
     #chatInputRow { display: flex; gap: .35rem; padding: .45rem; border-top: 1px solid var(--border); }
     #chatInput { flex: 1; padding: .42rem .5rem; border-radius: 8px; font-size: .82rem; }
+    #chatInput:disabled, #sendBtn:disabled { opacity: 0.55; cursor: wait; }
+    .msg.chat-thinking { font-style: italic; color: var(--muted); }
 
     /* ── Main panel ── */
     #main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
@@ -385,6 +388,11 @@
   let currentUrl = "";
   let currentAnalysis = null;
   let cy = null;
+  let chatHistory = [];
+  let chatSending = false;
+  let chatThinkingEl = null;
+  const CHAT_WELCOME = "Ask about modules, entrypoints, or dependencies.";
+  const MAX_CHAT_HISTORY = 20;
 
   const $ = (id) => document.getElementById(id);
 
@@ -840,6 +848,33 @@
   makeDraggable($("techOverlay"));
 
   // ── Chat ────────────────────────────────────────────────────────
+  function resetChat() {
+    chatHistory = [];
+    setChatSending(false);
+    $("chatMsgs").innerHTML = '<div class="msg bot">' + CHAT_WELCOME + '</div>';
+  }
+
+  function setChatSending(busy) {
+    chatSending = busy;
+    $("chatInput").disabled = busy;
+    $("sendBtn").disabled = busy;
+    Array.from($("promptRow").querySelectorAll(".prompt")).forEach((b) => {
+      b.disabled = busy;
+    });
+    if (busy) {
+      if (!chatThinkingEl) {
+        chatThinkingEl = document.createElement("div");
+        chatThinkingEl.className = "msg bot chat-thinking";
+        chatThinkingEl.textContent = "Thinking…";
+        $("chatMsgs").appendChild(chatThinkingEl);
+        $("chatMsgs").scrollTop = $("chatMsgs").scrollHeight;
+      }
+    } else if (chatThinkingEl) {
+      chatThinkingEl.remove();
+      chatThinkingEl = null;
+    }
+  }
+
   function formatBotText(text) {
     // Escape HTML first
     let s = text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -877,6 +912,7 @@
       $("promptRow").innerHTML = prompts.map(p => `<button class="prompt" data-q="${p.replace(/"/g,'&quot;')}">${p}</button>`).join("");
       Array.from($("promptRow").querySelectorAll(".prompt")).forEach(b => {
         b.onclick = () => {
+          if (chatSending) return;
           const q = b.getAttribute("data-q");
           $("chatInput").value = q;
           b.remove(); // remove chip immediately
@@ -889,7 +925,8 @@
 
   async function sendChat() {
     const message = $("chatInput").value.trim();
-    if (!message || !currentUrl) return;
+    if (chatSending || !message || !currentUrl) return;
+    setChatSending(true);
     $("chatInput").value = "";
     toggleSection('node', false);
 
@@ -903,13 +940,21 @@
       const res = await fetch(`${API}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ github_url: currentUrl, message }),
+        body: JSON.stringify({ github_url: currentUrl, message, history: chatHistory }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Chat failed.");
-      addMessage("bot", data.answer || "(No response)");
+      const answer = data.answer || "(No response)";
+      addMessage("bot", answer);
+      chatHistory.push({ role: "user", content: message });
+      chatHistory.push({ role: "assistant", content: answer });
+      if (chatHistory.length > MAX_CHAT_HISTORY) {
+        chatHistory = chatHistory.slice(-MAX_CHAT_HISTORY);
+      }
     } catch(e) {
       addMessage("bot", `Could not get answer: ${e.message}`);
+    } finally {
+      setChatSending(false);
     }
   }
 
@@ -936,6 +981,7 @@
       renderWorkflow(data);
       showTab();
       askedQuestions.clear();
+      resetChat();
       loadPrompts();
     } catch(e) {
       showError(e.message);
@@ -948,7 +994,7 @@
   $("refreshBtn").onclick = () => analyze(true);
   $("backBtn").onclick    = () => { $("app").classList.remove("visible"); $("landing").style.display = ""; };
   $("sendBtn").onclick    = sendChat;
-  $("chatInput").addEventListener("keydown", e => { if (e.key === "Enter") sendChat(); });
+  $("chatInput").addEventListener("keydown", e => { if (e.key === "Enter" && !chatSending) sendChat(); });
   $("urlInput").addEventListener("keydown",  e => { if (e.key === "Enter") analyze(false); });
 
   $("urlInput").value = "https://github.com/tiangolo/fastapi";

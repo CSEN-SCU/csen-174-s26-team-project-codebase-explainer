@@ -92,3 +92,30 @@ async def test_chat_about_repo_calls_openai_for_safe_messages():
     mock_client.chat.completions.create.assert_awaited_once()
     call_kwargs = mock_client.chat.completions.create.await_args.kwargs
     assert "untrusted" in call_kwargs["messages"][0]["content"].lower()
+
+
+@pytest.mark.asyncio
+async def test_chat_about_repo_includes_prior_history_in_openai_messages():
+    mock_resp = MagicMock()
+    mock_resp.choices = [MagicMock(message=MagicMock(content="In src/main.py."))]
+    prior = [
+        {"role": "user", "content": "What framework is used?"},
+        {"role": "assistant", "content": "It uses FastAPI."},
+    ]
+    with patch("ai_openai._client") as mock_factory:
+        mock_client = MagicMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_resp)
+        mock_factory.return_value = mock_client
+        await chat_about_repo(
+            "Where is the entry point?",
+            "summary",
+            ["FastAPI"],
+            [],
+            [],
+            history=prior,
+        )
+    messages = mock_client.chat.completions.create.await_args.kwargs["messages"]
+    assert messages[0]["role"] == "system"
+    assert messages[1:3] == prior
+    assert messages[-1]["role"] == "user"
+    assert "Where is the entry point?" in messages[-1]["content"]
