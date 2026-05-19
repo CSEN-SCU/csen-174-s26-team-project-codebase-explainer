@@ -86,3 +86,31 @@ async def test_chat_returns_crisis_safe_response_without_openai(app, tmp_db):
     chat_fn.assert_awaited_once()
     assert response.status_code == 200
     assert "988" in response.json()["answer"]
+
+
+@pytest.mark.asyncio
+async def test_chat_passes_conversation_history_to_model(app, tmp_db):
+    graph = {
+        "summary": "A sample repo.",
+        "tech_stack": ["Python"],
+        "nodes": [],
+        "edges": [],
+    }
+    database.save_analysis("owner", "repo", "https://github.com/owner/repo", graph)
+    prior = [
+        {"role": "user", "content": "What framework is used?"},
+        {"role": "assistant", "content": "It uses FastAPI."},
+    ]
+    with patch("main.chat_about_repo", new=AsyncMock(return_value="The API layer is in main.py.")) as chat_fn:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/api/chat",
+                json={
+                    "github_url": "https://github.com/owner/repo",
+                    "message": "Where is the entry point?",
+                    "history": prior,
+                },
+            )
+    assert response.status_code == 200
+    chat_fn.assert_awaited_once()
+    assert chat_fn.await_args.kwargs["history"] == prior

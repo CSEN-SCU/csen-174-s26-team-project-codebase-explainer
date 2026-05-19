@@ -144,6 +144,28 @@ INJECTION_SAFE_RESPONSE = (
     "I can't follow instructions that override my guidelines or reveal hidden system context."
 )
 
+MAX_CHAT_HISTORY_MESSAGES = 20
+MAX_CHAT_HISTORY_CONTENT_CHARS = 4000
+
+
+def normalize_chat_history(history: list[dict] | None) -> list[dict]:
+    """Keep the most recent user/assistant turns for multi-turn chat context."""
+    if not history:
+        return []
+    cleaned: list[dict] = []
+    for item in history:
+        role = (item.get("role") or "").strip().lower()
+        content = (item.get("content") or "").strip()
+        if role not in {"user", "assistant"} or not content:
+            continue
+        cleaned.append(
+            {
+                "role": role,
+                "content": content[:MAX_CHAT_HISTORY_CONTENT_CHARS],
+            }
+        )
+    return cleaned[-MAX_CHAT_HISTORY_MESSAGES:]
+
 
 def check_user_message_safety(message: str) -> str | None:
     """
@@ -333,6 +355,7 @@ async def chat_about_repo(
     edges: list[dict],
     *,
     code_context: dict | None = None,
+    history: list[dict] | None = None,
 ) -> str:
     safe_response = check_user_message_safety(user_message)
     if safe_response is not None:
@@ -355,13 +378,12 @@ async def chat_about_repo(
         f"{user_message}\n\n"
         "Answer in 2-3 complete sentences grounded in the JSON."
     )
+    prior_turns = normalize_chat_history(history)
+    messages = [{"role": "system", "content": CHAT_SYSTEM}, *prior_turns, {"role": "user", "content": prompt}]
     resp = await _client().chat.completions.create(
         model="gpt-4o",
         temperature=0.3,
         max_tokens=220,
-        messages=[
-            {"role": "system", "content": CHAT_SYSTEM},
-            {"role": "user", "content": prompt},
-        ],
+        messages=messages,
     )
     return (resp.choices[0].message.content or "").strip() or "(No response)"

@@ -6,7 +6,9 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 from ai_openai import analyze_repo, build_chat_code_context, chat_about_repo
 from fetcher.github_fetcher import get_repo_data, parse_github_url
@@ -56,9 +58,15 @@ class AnalyzeRequest(BaseModel):
     refresh: bool = False
 
 
+class ChatHistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
 class ChatRequest(BaseModel):
     github_url: str
     message: str
+    history: list[ChatHistoryMessage] = Field(default_factory=list)
 
 
 def _is_github_url(url: str) -> bool:
@@ -160,6 +168,12 @@ async def chat(request: ChatRequest):
     if not cached:
         raise HTTPException(status_code=400, detail="Analyze this repository first.")
 
+    history = [
+        {"role": turn.role, "content": (turn.content or "").strip()}
+        for turn in request.history
+        if (turn.content or "").strip()
+    ]
+
     try:
         answer = await chat_about_repo(
             msg,
@@ -168,6 +182,7 @@ async def chat(request: ChatRequest):
             cached.get("nodes") or [],
             cached.get("edges") or [],
             code_context=cached.get("code_context"),
+            history=history,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
