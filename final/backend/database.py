@@ -36,6 +36,10 @@ def init_db():
             conn.execute("ALTER TABLE analyses ADD COLUMN source TEXT")
         if "code_context" not in cols:
             conn.execute("ALTER TABLE analyses ADD COLUMN code_context TEXT")
+        if "workflow_nodes" not in cols:
+            conn.execute("ALTER TABLE analyses ADD COLUMN workflow_nodes TEXT")
+        if "workflow_edges" not in cols:
+            conn.execute("ALTER TABLE analyses ADD COLUMN workflow_edges TEXT")
         conn.commit()
 
 
@@ -47,19 +51,22 @@ def get_cached(owner: str, repo: str) -> Optional[dict]:
         ).fetchone()
     if not row:
         return None
+    keys = row.keys()
     out = {
-        "owner": row["owner"],
-        "repo": row["repo"],
+        "owner":      row["owner"],
+        "repo":       row["repo"],
         "github_url": row["github_url"],
-        "summary": row["summary"],
+        "summary":    row["summary"],
         "tech_stack": json.loads(row["tech_stack"] or "[]"),
-        "nodes": json.loads(row["nodes"] or "[]"),
-        "edges": json.loads(row["edges"] or "[]"),
+        "nodes":      json.loads(row["nodes"] or "[]"),
+        "edges":      json.loads(row["edges"] or "[]"),
         "created_at": row["created_at"],
-        "cached": True,
-        "source": row["source"] if "source" in row.keys() else None,
+        "cached":     True,
+        "source":     row["source"] if "source" in keys else None,
+        "workflow_nodes": json.loads(row["workflow_nodes"] or "[]") if "workflow_nodes" in keys else [],
+        "workflow_edges": json.loads(row["workflow_edges"] or "[]") if "workflow_edges" in keys else [],
     }
-    if "code_context" in row.keys() and row["code_context"]:
+    if "code_context" in keys and row["code_context"]:
         try:
             out["code_context"] = json.loads(row["code_context"])
         except json.JSONDecodeError:
@@ -78,19 +85,25 @@ def save_analysis(
 ):
     now = datetime.utcnow().isoformat()
     cc_blob = json.dumps(code_context) if code_context else None
+    wf_nodes = json.dumps(graph.get("workflow_nodes", []))
+    wf_edges = json.dumps(graph.get("workflow_edges", []))
     with get_connection() as conn:
         conn.execute("""
-            INSERT INTO analyses (owner, repo, github_url, summary, tech_stack, nodes, edges, created_at, source, code_context)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO analyses
+                (owner, repo, github_url, summary, tech_stack, nodes, edges,
+                 created_at, source, code_context, workflow_nodes, workflow_edges)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(owner, repo) DO UPDATE SET
-                github_url   = excluded.github_url,
-                summary      = excluded.summary,
-                tech_stack   = excluded.tech_stack,
-                nodes        = excluded.nodes,
-                edges        = excluded.edges,
-                created_at   = excluded.created_at,
-                source       = excluded.source,
-                code_context = excluded.code_context
+                github_url      = excluded.github_url,
+                summary         = excluded.summary,
+                tech_stack      = excluded.tech_stack,
+                nodes           = excluded.nodes,
+                edges           = excluded.edges,
+                created_at      = excluded.created_at,
+                source          = excluded.source,
+                code_context    = excluded.code_context,
+                workflow_nodes  = excluded.workflow_nodes,
+                workflow_edges  = excluded.workflow_edges
         """, (
             owner,
             repo,
@@ -102,6 +115,8 @@ def save_analysis(
             now,
             source,
             cc_blob,
+            wf_nodes,
+            wf_edges,
         ))
         conn.commit()
 
@@ -115,10 +130,10 @@ def list_recent(limit: int = 10) -> list[dict]:
         ).fetchall()
     return [
         {
-            "owner": r["owner"],
-            "repo": r["repo"],
+            "owner":      r["owner"],
+            "repo":       r["repo"],
             "github_url": r["github_url"],
-            "summary": r["summary"],
+            "summary":    r["summary"],
             "tech_stack": json.loads(r["tech_stack"] or "[]"),
             "created_at": r["created_at"],
         }

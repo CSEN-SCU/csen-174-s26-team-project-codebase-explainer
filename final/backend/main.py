@@ -116,14 +116,17 @@ async def analyze(request: AnalyzeRequest):
     try:
         repo_data = await get_repo_data(request.github_url, token=os.getenv("GITHUB_TOKEN"))
     except ValueError as e:
+        print(f"[analyze] GitHub fetch ValueError: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"GitHub fetch failed: {e}")
+        print(f"[analyze] GitHub fetch Exception ({type(e).__name__}): {e}")
+        raise HTTPException(status_code=502, detail=f"GitHub fetch failed: {type(e).__name__}: {e}")
 
     try:
         graph = await analyze_repo(repo_data)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
+        print(f"[analyze] OpenAI analysis Exception ({type(e).__name__}): {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {type(e).__name__}: {e}")
 
     code_context = build_chat_code_context(
         repo_data.get("file_tree") or [], repo_data.get("files") or {}
