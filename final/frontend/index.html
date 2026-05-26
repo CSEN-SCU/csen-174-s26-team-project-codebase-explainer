@@ -320,6 +320,17 @@
         <div id="nodeDetail">Click any node for details.</div>
       </div>
 
+      <!-- Disclaimer — collapsible, collapsed by default -->
+      <div class="section-toggle" id="disclaimerToggle" onclick="toggleSection('disclaimer')">
+        <span class="label">DISCLAIMER</span>
+        <span class="section-chevron" id="disclaimerChevron">›</span>
+      </div>
+      <div class="section-body-wrap collapsed" id="disclaimerContent" style="max-height:0">
+        <div style="font-size:.75rem;color:var(--muted);line-height:1.6;padding-bottom:.5rem;">
+          This architecture map is <strong style="color:var(--text)">AI-generated</strong> and may not fully reflect the actual codebase. Module paths, dependency edges, and descriptions are produced by GPT-4o and have not been verified against the real file tree. Always confirm findings in the source code before making architectural decisions.
+        </div>
+      </div>
+
       <div class="section-toggle" style="cursor:default;padding-top:.7rem">
         <span class="label">ASK AI ABOUT THIS REPO</span>
       </div>
