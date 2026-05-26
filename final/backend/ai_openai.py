@@ -1,5 +1,7 @@
+import asyncio
 import json
 import re
+import time
 from openai import AsyncOpenAI
 
 from analyzer.ai_analyzer import format_tree, _should_ignore
@@ -287,54 +289,73 @@ def _modules_to_graph(repo_name: str, summary: str, ai_result: dict) -> dict:
 
 
 async def analyze_repo(repo_data: dict) -> dict:
-    full_tree = repo_data.get("file_tree") or []
+    t0 = time.perf_counter()
 
     # 1. Format the real file tree (filters noise, formats like `tree` command)
+    full_tree = repo_data.get("file_tree") or []
     tree_str = format_tree(full_tree, repo_data["repo"])
 
-    # 2. Build file content snippets
+    # 2. Build file content snippets — 12 files × 2000 chars keeps token count lean
     snippets = []
-    for path, content in list((repo_data.get("files") or {}).items())[:16]:
-        snippets.append(f"=== {path} ===\n{content[:2500]}")
+    for path, content in list((repo_data.get("files") or {}).items())[:12]:
+        snippets.append(f"=== {path} ===\n{content[:2000]}")
     file_contents = "\n\n".join(snippets)
 
+    t_prep = time.perf_counter()
+    print(f"[profile] prep (tree format + snippets): {t_prep - t0:.2f}s")
+
+    # 3. Build both prompts up front
     prompt = ANALYSIS_USER.format(
         owner=repo_data["owner"],
         repo=repo_data["repo"],
         file_tree=tree_str,
         file_contents=file_contents,
     )
-    resp = await _client().chat.completions.create(
-        model="gpt-4o",
-        response_format={"type": "json_object"},
-        temperature=0.2,
-        messages=[
-            {"role": "system", "content": SYSTEM_ANALYSIS},
-            {"role": "user", "content": prompt},
-        ],
-    )
-    ai_result = _parse_json_object(resp.choices[0].message.content or "{}")
-
-    # 3. Build architecture graph from AI modules — no directory crawling
-    graph = _modules_to_graph(repo_data["repo"], ai_result.get("summary", ""), ai_result)
-
-    # 4. Second AI call — workflow/data-flow graph (runs in parallel conceptually)
     workflow_prompt = WORKFLOW_PROMPT.format(
         owner=repo_data["owner"],
         repo=repo_data["repo"],
         file_tree=tree_str,
         file_contents=file_contents,
     )
-    wf_resp = await _client().chat.completions.create(
-        model="gpt-4o",
-        response_format={"type": "json_object"},
-        temperature=0.2,
-        messages=[
-            {"role": "system", "content": SYSTEM_ANALYSIS},
-            {"role": "user", "content": workflow_prompt},
-        ],
-    )
-    wf_result = _parse_json_object(wf_resp.choices[0].message.content or "{}")
+
+    # 4. Fire both GPT-4o calls in parallel — they're fully independent
+    async def _call_architecture() -> dict:
+        t = time.perf_counter()
+        resp = await _client().chat.completions.create(
+            model="gpt-4o",
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            messages=[
+                {"role": "system", "content": SYSTEM_ANALYSIS},
+                {"role": "user",   "content": prompt},
+            ],
+        )
+        print(f"[profile] GPT-4o call 1 (architecture): {time.perf_counter() - t:.2f}s")
+        return _parse_json_object(resp.choices[0].message.content or "{}")
+
+    async def _call_workflow() -> dict:
+        t = time.perf_counter()
+        resp = await _client().chat.completions.create(
+            model="gpt-4o",
+            response_format={"type": "json_object"},
+            temperature=0.2,
+            messages=[
+                {"role": "system", "content": SYSTEM_ANALYSIS},
+                {"role": "user",   "content": workflow_prompt},
+            ],
+        )
+        print(f"[profile] GPT-4o call 2 (workflow): {time.perf_counter() - t:.2f}s")
+        return _parse_json_object(resp.choices[0].message.content or "{}")
+
+    ai_result, wf_result = await asyncio.gather(_call_architecture(), _call_workflow())
+
+    t_ai = time.perf_counter()
+    print(f"[profile] both AI calls (parallel wall time): {t_ai - t_prep:.2f}s")
+
+    # 5. Build architecture graph from AI modules — no directory crawling
+    graph = _modules_to_graph(repo_data["repo"], ai_result.get("summary", ""), ai_result)
+
+    print(f"[profile] analyze_repo total: {time.perf_counter() - t0:.2f}s")
 
     return {
         "summary":        ai_result.get("summary", ""),

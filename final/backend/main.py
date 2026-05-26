@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -121,6 +122,8 @@ async def analyze(request: AnalyzeRequest):
             safe.pop("code_context", None)
             return {"repo": f"{owner}/{repo_name}", **safe}
 
+    t_start = time.perf_counter()
+
     try:
         repo_data = await get_repo_data(request.github_url, token=os.getenv("GITHUB_TOKEN"))
     except ValueError as e:
@@ -130,11 +133,16 @@ async def analyze(request: AnalyzeRequest):
         print(f"[analyze] GitHub fetch Exception ({type(e).__name__}): {e}")
         raise HTTPException(status_code=502, detail=f"GitHub fetch failed: {type(e).__name__}: {e}")
 
+    t_fetch = time.perf_counter()
+    print(f"[profile] GitHub fetch (tree + {len(repo_data.get('files', {}))} files): {t_fetch - t_start:.2f}s")
+
     try:
         graph = await analyze_repo(repo_data)
     except Exception as e:
         print(f"[analyze] OpenAI analysis Exception ({type(e).__name__}): {e}")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {type(e).__name__}: {e}")
+
+    print(f"[profile] TOTAL (fetch + AI): {time.perf_counter() - t_start:.2f}s")
 
     code_context = build_chat_code_context(
         repo_data.get("file_tree") or [], repo_data.get("files") or {}
