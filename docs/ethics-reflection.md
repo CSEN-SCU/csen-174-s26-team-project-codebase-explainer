@@ -1,27 +1,149 @@
-Product Vision:
-FOR developers, CS students, and engineers joining unfamiliar GitHub projects WHO need to understand large codebases, architecture, and component relationships quickly. GitMap is an AI-powered web application for GitHub repository visualization THAT automatically analyzes repositories and generates interactive architecture maps with explorable modules, dependencies, and plain-English explanations, UNLIKE static diagrams, documentation, or text-only AI tools that focus on isolated snippets or overwhelming outputs. OUR PRODUCT provides a dynamic, visual, and interactive way to explore and understand how an entire codebase is structured and connected, POWERED BY OpenAI API (GPT-4o), GitHub GraphQL API, and interactive web-based visualization libraries.
-Users:
-Stakeholders
-User group — developers and CS students onboarding to unfamiliar repositories. This group pastes a GitHub URL into GitMap and relies on the generated architecture graph and AI chat to orient themselves in a codebase they did not write.
-Non-user group — open-source repository authors and maintainers. When a user submits any public GitHub URL, GitMap fetches up to 25 source files from that repository and transmits their contents to the OpenAI API for analysis. The repository's authors did not opt in to this, are not notified, and receive no attribution in the output — yet their code is the raw material the product depends on.
-Potential Harms
+# Ethics Reflection – GitMap
 
-1. AI hallucinations mislead developers making architectural decisions
-Harm.
-GitMap presents GPT-4o's output as an authoritative interactive map of the repository. When GPT-4o hallucinates module paths, invents dependency edges, or mischaracterizes what a component does, developers onboarding to the codebase form wrong mental models — potentially introducing bugs, making incorrect changes, or bypassing the wrong system component under the assumption that the map is accurate.
-Principle.
- IEEE/ACM SE Code 1.03 — "Approve software only if they have a well-founded belief that it is safe, meets specifications, passes appropriate tests, and does not diminish quality of life." The product currently has no validation layer that checks AI-returned module paths against the actual file tree before rendering them.
-Mitigation.
-Our team identified this as deferred tech debt before code freeze (architecture retrospective, Tech Debt). Before demo night, our team will add a visible disclaimer in the UI — adjacent to the architecture graph — stating that the map is AI-generated and may not fully reflect the actual codebase. This does not fix the underlying problem but ensures users know to verify against the real source before acting on the output.
-2. Source code transmitted to a third-party API without repository owner consent
-Harm. Every fresh analysis sends up to 25 source files — including business logic, configuration patterns, and design decisions — to OpenAI's API. Authors of public repositories did not consent to their code being processed by a commercial AI service. For maintainers of small open-source projects, proprietary startup code that happens to be public, or repositories containing embedded sensitive strings, this represents an unannounced use of their work.
-Principle. IEEE/ACM SE Code 3.12 — "Be sensitive to the right of others to privacy and work to preserve the privacy of users and third parties." Repository authors are third parties the product acts on without their knowledge.
-Mitigation. GitMap is limited to public repositories — it has no mechanism to access private repos, which require authentication the product does not support. OpenAI's API terms state that inputs submitted via the API are not used to train models without explicit opt-in, which bounds the downstream risk. Our team  accepts the residual risk for the prototype context on the grounds that public code is by definition publicly accessible, and that the use (architecture summarization) is read-only and non-redistributive. A production deployment would require a clear disclosure in the product's terms of use.
-3. No rate limiting enables financial abuse and denial of service
-Harm. Any visitor can submit any public GitHub URL and trigger two full GPT-4o API calls with no authentication, no per-user quota, and no cooldown. A malicious actor submitting a unique novel URL on every request would drain the operator's OpenAI API budget with no guard. In a production context this creates both financial harm to the operator and denial of service for legitimate users who exhaust the budget.
-Principle. IEEE/ACM SE Code 1.03 — "Approve software only if they have a well-founded belief that it is safe." A product with no access controls that allow uncapped financial exploitation of the operator does not meet a basic standard of operational safety.
-Mitigation. The SQLite cache substantially mitigates repeat-analysis cost: any repo analyzed once is served from cache on subsequent requests, costing zero additional API calls. Our team  identified the lack of rate limiting during the W7 red team review and accepted it explicitly because adding an authentication system is out of scope for the remaining sprint. This is classified as Inadvertent-Reckless tech debt in the architecture retrospective. A production deployment would require API key controls, per-IP rate limiting, and a spending cap on the OpenAI account.
+---
 
+# Product Vision
 
-One Concrete Change
-During the W7 red team review, our team identified that the /api/chat endpoint would pass any user message — including crisis language and prompt-injection attempts — directly to GPT-4o with no pre-processing. In response, our team added a pattern-matching safety layer in ai_openai.py (PR #28) that intercepts messages containing crisis language (e.g., references to self-harm) and prompt-override attempts (e.g., "ignore previous instructions") before they reach the model, returning a canned safe response in each case — because a codebase visualization tool is not equipped to handle crisis disclosures, and allowing jailbreak attempts to reach the model posed both a safety and a reliability risk.
+> FOR developers, CS students, and engineers joining unfamiliar GitHub projects WHO need to understand large codebases, architecture, and component relationships quickly.
+
+GitMap is an AI-powered web application for GitHub repository visualization THAT automatically analyzes repositories and generates interactive architecture maps with explorable modules, dependencies, and plain-English explanations.
+
+UNLIKE static diagrams, documentation, or text-only AI tools that focus on isolated snippets or overwhelming outputs, OUR PRODUCT provides a dynamic, visual, and interactive way to explore and understand how an entire codebase is structured and connected.
+
+**POWERED BY:** OpenAI API (GPT-4o), GitHub GraphQL API, and interactive web-based visualization libraries.
+
+---
+
+# Stakeholders
+
+## User Group
+
+**Developers and CS students onboarding to unfamiliar repositories**
+
+This group pastes a GitHub URL into GitMap and relies on the generated architecture graph and AI chat to orient themselves in a codebase they did not write.
+
+## Non-User Group
+
+**Open-source repository authors and maintainers**
+
+When a user submits any public GitHub URL, GitMap fetches up to 25 source files from that repository and transmits their contents to the OpenAI API for analysis.
+
+The repository's authors did not opt in, are not notified, and receive no attribution in the output—yet their code is the raw material the product depends on.
+
+---
+
+# Potential Harms
+
+## 1. AI Hallucinations Mislead Developers Making Architectural Decisions
+
+### Harm
+
+GitMap presents GPT-4o's output as an authoritative interactive map of the repository.
+
+When GPT-4o hallucinates module paths, invents dependency edges, or mischaracterizes what a component does, developers onboarding to the codebase form incorrect mental models. This may lead to bugs, poor architectural decisions, or modifications to the wrong system component.
+
+### Principle
+
+> **IEEE/ACM SE Code 1.03**
+>
+> "Approve software only if they have a well-founded belief that it is safe, meets specifications, passes appropriate tests, and does not diminish quality of life."
+
+The product currently has no validation layer that checks AI-generated module paths against the actual repository structure before rendering them.
+
+### Mitigation
+
+Our team identified this issue as deferred technical debt before code freeze.
+
+Before demo night, we will add a visible disclaimer adjacent to the architecture graph stating that the visualization is AI-generated and may not fully reflect the actual codebase.
+
+While this does not eliminate the underlying risk, it improves transparency and encourages users to verify important information against the original source code.
+
+---
+
+## 2. Source Code Transmitted to a Third-Party API Without Repository Owner Consent
+
+### Harm
+
+Every fresh analysis sends up to 25 source files—including business logic, configuration patterns, and design decisions—to OpenAI's API.
+
+Authors of public repositories did not explicitly consent to their code being processed by a commercial AI service. For maintainers of small open-source projects, startup repositories, or projects containing sensitive implementation details, this represents an unannounced secondary use of their work.
+
+### Principle
+
+> **IEEE/ACM SE Code 3.12**
+>
+> "Be sensitive to the right of others to privacy and work to preserve the privacy of users and third parties."
+
+Repository authors are third parties affected by the product without their knowledge.
+
+### Mitigation
+
+GitMap is restricted to public repositories and cannot access private repositories.
+
+Additionally, OpenAI API submissions are not used for model training unless explicitly opted in.
+
+For this prototype, the team accepts the residual risk because:
+
+- The code analyzed is already publicly accessible.
+- Analysis is read-only.
+- GitMap does not redistribute repository contents.
+
+A production deployment would require a more explicit disclosure policy and terms of use.
+
+---
+
+## 3. No Rate Limiting Enables Financial Abuse and Denial of Service
+
+### Harm
+
+Any visitor can submit any public GitHub URL and trigger two GPT-4o API calls.
+
+Because there is currently:
+
+- No authentication
+- No per-user quota
+- No cooldown period
+
+a malicious actor could repeatedly submit unique repositories and rapidly exhaust the project's OpenAI budget.
+
+This creates both financial harm to the operator and service degradation for legitimate users.
+
+### Principle
+
+> **IEEE/ACM SE Code 1.03**
+>
+> "Approve software only if they have a well-founded belief that it is safe."
+
+A system that allows uncapped financial exploitation does not meet a basic standard of operational safety.
+
+### Mitigation
+
+GitMap currently uses a SQLite cache.
+
+Repositories that have already been analyzed are served from cache, eliminating additional API costs for repeated requests.
+
+The lack of rate limiting was identified during the W7 Red Team Review and formally accepted as technical debt due to project scope constraints.
+
+A production deployment would require:
+
+- User authentication
+- Per-IP rate limiting
+- Usage quotas
+- OpenAI spending limits
+
+---
+
+# One Concrete Change
+
+During the W7 Red Team Review, our team discovered that the `/api/chat` endpoint forwarded all user input directly to GPT-4o without preprocessing.
+
+In response, we implemented a pattern-matching safety layer in `ai_openai.py` (PR #28) that intercepts:
+
+- Crisis-related language (e.g., self-harm references)
+- Prompt-injection attempts (e.g., "ignore previous instructions")
+
+before requests reach the model.
+
+Instead, the system returns a predefined safe response.
+
+This change was made because GitMap is a repository visualization tool, not a crisis-support platform, and allowing jailbreak attempts to reach the model created both safety and reliability risks.
