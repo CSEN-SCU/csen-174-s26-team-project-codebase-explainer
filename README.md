@@ -5,7 +5,7 @@
 ## Team
 
 - Sally Kim
-- Jesse
+- Yanqi Liu
 - Daniela
 
 ## About
