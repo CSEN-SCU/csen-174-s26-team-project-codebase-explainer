@@ -11,9 +11,11 @@
     :root {
       --bg: #0d1117; --surface: #161b22; --surface2: #1f2733; --border: #30363d;
       --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --good: #3fb950; --warn: #f78166;
+      --font-sans: "Aptos", "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--bg); }
+    body { margin: 0; font-family: var(--font-sans); color: var(--text); background: var(--bg); }
 
     /* ── Landing ── */
     #landing {
@@ -75,8 +77,9 @@
     .ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
 
     /* ── App shell ── */
-    #app { display: none; height: 100vh; }
+    #app { display: none; height: 100vh; height: 100dvh; }
     #app.visible { display: flex; }
+    #mobileTabBar { display: none; }
 
     /* Sidebar */
     #side { width: 340px; border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; flex-shrink: 0; }
@@ -243,10 +246,37 @@
 
     @media (max-width: 900px) {
       #app.visible { flex-direction: column; }
-      #side { width: 100%; height: 50vh; border-right: none; border-bottom: 1px solid var(--border); }
-      #graphPanel { flex-direction: column; }
-      #archSide { border-right: none; border-bottom: 1px solid var(--border); }
+
+      /* Sidebar: hidden by default; shown only on Chat tab */
+      #side { width: 100%; height: auto; flex: 1; min-height: 0; border-right: none; border-bottom: none; display: none; }
+      #app.mobile-chat-active #side { display: flex; }
+      #app.mobile-chat-active #main { display: none; }
+
+      /* Each graph side fills full height alone */
+      #graphPanel { flex-direction: column; flex: 1; }
+      #archSide   { flex: 1; min-height: 0; border-right: none; border-bottom: none; }
+      #wfSide     { flex: 1; min-height: 0; overflow: auto; display: none; }
       #resizeHandle { display: none; }
+
+      /* Flow tab: show workflow, hide arch */
+      #app.mobile-flow-active #wfSide   { display: flex; flex-direction: column; }
+      #app.mobile-flow-active #archSide { display: none; }
+
+      /* Mobile tab bar */
+      #mobileTabBar {
+        display: flex; flex-shrink: 0; height: 48px;
+        border-top: 1px solid var(--border); background: var(--surface);
+      }
+      .mobile-tab {
+        flex: 1; padding: .7rem; background: transparent; color: var(--muted);
+        border: none; border-radius: 0; font-size: .88rem; font-weight: 600;
+        border-top: 2px solid transparent; transition: color .15s;
+        font-family: inherit; cursor: pointer;
+      }
+      .mobile-tab.active { color: var(--accent); border-top-color: var(--accent); }
+
+      /* Prevent iOS auto-zoom on input focus */
+      input { font-size: 16px !important; }
     }
   </style>
 </head>
@@ -259,8 +289,7 @@
     <div class="hero-badge">AI-Powered Codebase Explorer</div>
     <h1 class="logo">GitMap</h1>
     <p class="hero-tagline">
-      Paste a GitHub URL. Get an interactive architecture map,<br>
-      animated workflow, and an AI you can ask anything.
+      Paste a GitHub URL. Get an interactive architecture map, animated workflow, and an AI you can ask anything.
     </p>
 
     <div class="search-bar">
@@ -385,6 +414,13 @@
     </div>
 
   </main>
+
+  <!-- Mobile-only tab bar -->
+  <div id="mobileTabBar">
+    <button id="tabArch" class="mobile-tab active">Arch</button>
+    <button id="tabFlow" class="mobile-tab">Flow</button>
+    <button id="tabChat" class="mobile-tab">Chat</button>
+  </div>
 </div>
 
 <div id="loading">Analyzing repository…</div>
@@ -392,8 +428,8 @@
 
 <script>
   cytoscape.use(cytoscapeDagre);
-  const API = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
-    ? "http://127.0.0.1:8001/api"
+  const API = (["127.0.0.1", "localhost"].includes(window.location.hostname) || window.location.port === "5173")
+    ? `http://${window.location.hostname}:8001/api`
     : window.location.origin + "/api";
 
   let currentUrl = "";
@@ -579,7 +615,7 @@
       const d = evt.target.data();
       const display = d.rawLabel || d.label;
       const pathLine = (d.id && d.id !== "root" && d.id !== (d.rawLabel||"").toLowerCase())
-        ? `<div style="font-family:monospace;font-size:.72rem;color:var(--muted);margin-bottom:.3rem;word-break:break-all">${d.id}</div>`
+        ? `<div style="font-family:var(--font-mono);font-size:.72rem;color:var(--muted);margin-bottom:.3rem;word-break:break-all">${d.id}</div>`
         : "";
       $("nodeDetail").innerHTML = `
         ${pathLine}
@@ -687,7 +723,7 @@
       if (edge && edge.label) {
         connSVG += `
           <text x="${cx + 8}" y="${(y1 + y2) / 2}" fill="#6e7681" font-size="8"
-            font-family="Segoe UI,system-ui,sans-serif" opacity="0"
+            font-family="Aptos, Inter, -apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif" opacity="0"
             style="animation:wfFade 0.25s ${delay + 0.2}s forwards">${esc(edge.label)}</text>
         `;
       }
@@ -722,7 +758,7 @@
       nodesSVG += `
           <text x="${p.cx}" y="${yc}" text-anchor="middle"
             fill="${col}" font-size="11.5" font-weight="700"
-            font-family="Segoe UI,system-ui,sans-serif">${label}</text>
+            font-family="Aptos, Inter, -apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif">${label}</text>
       `;
       yc += DESC_GAP;
 
@@ -730,7 +766,7 @@
         yc += LH;
         nodesSVG += `
           <text x="${p.cx}" y="${yc}" text-anchor="middle"
-            fill="#8b949e" font-size="8.5" font-family="Segoe UI,system-ui,sans-serif">${esc(line)}</text>
+            fill="#8b949e" font-size="8.5" font-family="Aptos, Inter, -apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif">${esc(line)}</text>
         `;
       });
 
@@ -740,7 +776,7 @@
           yc += FILE_LH;
           nodesSVG += `
             <text x="${p.x + 14}" y="${yc}"
-              fill="#58a6ff" font-size="8" font-family="monospace">&#128196; ${esc(fname)}</text>
+              fill="#58a6ff" font-size="8" font-family="SFMono-Regular, Consolas, Liberation Mono, Menlo, monospace">&#128196; ${esc(fname)}</text>
           `;
         });
       }
@@ -749,7 +785,7 @@
       nodesSVG += `
           <text x="${p.cx}" y="${yc}" text-anchor="middle"
             fill="${col}" font-size="7.5" opacity=".5"
-            font-family="Segoe UI,system-ui,sans-serif">${n.type || "module"}</text>
+            font-family="Aptos, Inter, -apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif">${n.type || "module"}</text>
         </g>
       `;
     });
@@ -818,17 +854,13 @@
 
   // ── Draggable overlays ──────────────────────────────────────────
   function makeDraggable(el) {
-    // Drag from anywhere on the overlay (not just the handle)
     let dragging = false, offX = 0, offY = 0;
 
-    el.addEventListener("mousedown", e => {
-      e.preventDefault();
+    function startDrag(clientX, clientY) {
       const rect = el.getBoundingClientRect();
       const par  = el.offsetParent ? el.offsetParent.getBoundingClientRect() : { left: 0, top: 0 };
-      // Offset of the click from the element's top-left corner
-      offX = e.clientX - rect.left;
-      offY = e.clientY - rect.top;
-      // Snap from bottom/right to top/left positioning
+      offX = clientX - rect.left;
+      offY = clientY - rect.top;
       el.style.bottom = "auto";
       el.style.right  = "auto";
       el.style.left   = (rect.left - par.left) + "px";
@@ -836,27 +868,56 @@
       dragging = true;
       el.classList.add("dragging-overlay");
       document.body.style.userSelect = "none";
-    });
+    }
 
-    document.addEventListener("mousemove", e => {
+    function moveDrag(clientX, clientY) {
       if (!dragging) return;
       const par  = el.offsetParent ? el.offsetParent.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
-      const newL = e.clientX - offX - par.left;
-      const newT = e.clientY - offY - par.top;
+      const newL = clientX - offX - par.left;
+      const newT = clientY - offY - par.top;
       el.style.left = Math.min(Math.max(newL, 0), par.width  - el.offsetWidth)  + "px";
       el.style.top  = Math.min(Math.max(newT, 0), par.height - el.offsetHeight) + "px";
-    });
+    }
 
-    document.addEventListener("mouseup", () => {
+    function endDrag() {
       if (!dragging) return;
       dragging = false;
       el.classList.remove("dragging-overlay");
       document.body.style.userSelect = "";
-    });
+    }
+
+    el.addEventListener("mousedown", e => { e.preventDefault(); startDrag(e.clientX, e.clientY); });
+    document.addEventListener("mousemove", e => moveDrag(e.clientX, e.clientY));
+    document.addEventListener("mouseup", endDrag);
+
+    el.addEventListener("touchstart", e => { e.preventDefault(); startDrag(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+    document.addEventListener("touchmove", e => { if (dragging) { e.preventDefault(); moveDrag(e.touches[0].clientX, e.touches[0].clientY); } }, { passive: false });
+    document.addEventListener("touchend", endDrag);
   }
   renderLegend();
   makeDraggable($("legendOverlay"));
   makeDraggable($("techOverlay"));
+
+  // ── Mobile tab bar ───────────────────────────────────────────────
+  (function initMobileTabs() {
+    const tabArch = $("tabArch");
+    const tabFlow = $("tabFlow");
+    const tabChat = $("tabChat");
+    if (!tabArch) return;
+    const tabs = [tabArch, tabFlow, tabChat];
+
+    function setTab(active) {
+      tabs.forEach(t => t.classList.toggle("active", t === active));
+      $("app").classList.remove("mobile-flow-active", "mobile-chat-active");
+      if (active === tabFlow) $("app").classList.add("mobile-flow-active");
+      if (active === tabChat) $("app").classList.add("mobile-chat-active");
+      if (active === tabArch && cy) setTimeout(() => { cy.resize(); cy.fit(cy.elements(), 30); }, 50);
+    }
+
+    tabArch.addEventListener("click", () => setTab(tabArch));
+    tabFlow.addEventListener("click", () => setTab(tabFlow));
+    tabChat.addEventListener("click", () => setTab(tabChat));
+  })();
 
   // ── Chat ────────────────────────────────────────────────────────
   function resetChat() {
@@ -890,7 +951,7 @@
     // Escape HTML first
     let s = text.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     // `code` → inline code
-    s = s.replace(/`([^`]+)`/g, '<code style="background:#1a2233;border:1px solid #2d3b50;border-radius:4px;padding:.1em .35em;font-family:monospace;font-size:.85em;color:#79c0ff">$1</code>');
+    s = s.replace(/`([^`]+)`/g, '<code style="background:#1a2233;border:1px solid #2d3b50;border-radius:4px;padding:.1em .35em;font-family:var(--font-mono);font-size:.85em;color:#79c0ff">$1</code>');
     // **bold**
     s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     // Line breaks
@@ -987,6 +1048,10 @@
       currentAnalysis = data;
       $("landing").style.display = "none";
       $("app").classList.add("visible");
+      // Reset to Arch tab on mobile
+      $("app").classList.remove("mobile-flow-active", "mobile-chat-active");
+      const ta = $("tabArch"), tf = $("tabFlow"), tc = $("tabChat");
+      if (ta) { ta.classList.add("active"); tf.classList.remove("active"); tc.classList.remove("active"); }
       renderSidebar(data);
       renderGraph(data);
       renderWorkflow(data);
