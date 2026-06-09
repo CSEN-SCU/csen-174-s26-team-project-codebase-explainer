@@ -29,13 +29,16 @@ Repo reference: `product-vision.md` (current Moore’s template), `docs/product-
 W4 — intended architecture (Week 4)
 
 Single-file HTML (Cytoscape + Mermaid), FastAPI with three owner modules (fetcher / analyzer / chat), one GPT-4o call per analysis, graph structure from real file tree with AI descriptions only.
+![W4 Architecture](docs/images/w4.png)
 
 Repo reference: `docs/architecture/architecture.md` (Level 1–2 diagrams, “file tree drives graph structure”). W8 — revised architecture (after consolidation + red team)
 
 After merging Sally’s prototype into final/ and W7 security remediations: Mermaid removed, two sequential GPT-4o calls (architecture + workflow), module-driven graph in one `ai_openai.py`, CORS allowlist (PR #29), prompt-injection + crisis guards (PR #28). Documented at merge `6340e06`.
+![W8 Architecture](docs/images/w8.png)
 
 Repo reference: `docs/architecture-retrospective.md` (W8-era container diagram), `docs/sprint-2-retro.md` (red team response). Code freeze — current architecture (Week 10)
 
+![Final Architecture](docs/images/final.png)
 Sprint 3 added parallel GPT-4o calls (asyncio.gather), pipeline profiling logs, ethics disclaimer in UI, and parallelized per-file GitHub reads (`e096843`, `49bf927`). What changed between stages (triggers + traceability)
 
 TransitiWhat changed Trigger Repo trace on
