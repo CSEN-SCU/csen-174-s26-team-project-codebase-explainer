@@ -84,7 +84,7 @@ graph TD
 
 ---
 
-## Current-State Architecture
+## W8 Architecture (Code Freeze)
 
 ### Level 1 — System Context
 
@@ -109,7 +109,7 @@ graph TD
 
 ### Level 2 — Container Diagram
 
-The container topology is similar to W4, with three meaningful structural changes: Mermaid.js is gone from the frontend, the AI layer now makes two sequential GPT-4o calls per analysis, and the chat and analysis logic are consolidated into a single `ai_openai.py` module rather than maintained as separate files per teammate.
+The container topology is similar to W4, with three meaningful structural changes: Mermaid.js is gone from the frontend, the AI layer now makes two **sequential** GPT-4o calls per analysis, and the chat and analysis logic are consolidated into a single `ai_openai.py` module rather than maintained as separate files per teammate.
 
 ```mermaid
 graph TD
@@ -202,7 +202,7 @@ graph TD
 
 ## Tech Debt Heading into Code Freeze
 
-**Sequential AI calls (no parallelism).** The two GPT-4o calls in `analyze_repo()` run one after the other. They are independent and could be parallelized with `asyncio.gather`, cutting fresh analysis time by 40-50%. *Quadrant: Deliberate-Prudent — the team chose sequential calls for simplicity; we will live with this through demo night.*
+**~~Sequential AI calls (no parallelism).~~** ✅ *Resolved in Sprint 3.* The two GPT-4o calls in `analyze_repo()` were parallelized with `asyncio.gather`. Per-stage `[profile]` timing logs were added to `main.py` and `ai_openai.py` to validate the improvement. Measured wall time dropped from ~15–20s to ~7–9s. Input file count was also reduced (12 files × 2000 chars, down from 16 × 2500) to reduce token volume. *Was Deliberate-Prudent — resolved before demo night.*
 
 **No retry logic on OpenAI or GitHub calls.** A transient network error or a momentary OpenAI overload returns a 500 directly to the user with no retry attempt. Simple exponential backoff with two retries would cover the majority of transient failures. *Quadrant: Inadvertent-Reckless — the team did not plan for it and it has not been prioritized. Will live with it through demo night.*
 
@@ -216,6 +216,86 @@ graph TD
 
 ---
 
+## Final Architecture (W9 — Post Sprint 3)
+
+Sprint 3 addressed the highest-impact tech debt item: sequential AI calls. Both GPT-4o calls are now fired concurrently with `asyncio.gather`, cutting fresh analysis wall time from ~15–20s to ~7–9s. Per-stage `[profile]` timing instrumentation was added to both `main.py` and `ai_openai.py` to measure and validate the improvement. The frontend received a collapsible Disclaimer section (satisfying the ethics assignment requirement) and a Fit View button. Input token volume was reduced (12 files × 2000 chars, down from 16 × 2500).
+
+### Level 1 — System Context
+
+The system boundary is unchanged from W8. No new external integrations were added in Sprint 3.
+
+```mermaid
+graph TD
+    User(["👤 Developer / Student\nPastes a GitHub URL,\nexplores architecture"])
+    GitMap["🗺️ GitMap\nTurns any public GitHub URL into an\ninteractive architecture + workflow map\nwith an AI chatbot"]
+    GitHub(["⚙️ GitHub REST API\nProvides recursive file tree\nand raw file contents"])
+    OpenAI(["🤖 OpenAI API — GPT-4o\nTwo calls per analysis fired in parallel:\n(1) module graph  (2) workflow steps\nPlus one call per chat message"])
+
+    User -->|"paste URL, explore graph,\nask questions"| GitMap
+    GitMap -->|"GET file tree + file contents / HTTPS"| GitHub
+    GitMap -->|"POST analysis prompts ×2 parallel, chat prompt ×n / HTTPS"| OpenAI
+
+    style User fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    style GitMap fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    style GitHub fill:#fef3c7,stroke:#f59e0b,color:#451a03
+    style OpenAI fill:#dcfce7,stroke:#16a34a,color:#14532d
+```
+
+### Level 2 — Container Diagram
+
+Key changes from W8: the two GPT-4o calls in `ai_openai.py` now run concurrently via `asyncio.gather`; per-stage `[profile]` timing logs were added to both `main.py` and `ai_openai.py`; the frontend gained a collapsible Disclaimer section and a Fit View button; input file count and snippet length were reduced to lower token usage.
+
+```mermaid
+graph TD
+    User(["👤 User"])
+
+    FE["🖥️ Frontend — single HTML file\nCytoscape.js (architecture graph)\nSVG renderer (animated workflow)\nCollapsible sidebar: Overview, Selected Node,\nDisclaimer, Ask AI\nFit View button · draggable overlays\nDeployed on Render (static)"]
+
+    DB[("🗄️ SQLite Cache\ngitmap.db\nanalyses table:\nowner, repo, summary, tech_stack,\nnodes, edges, workflow_nodes,\nworkflow_edges, code_context")]
+
+    GitHub(["⚙️ GitHub REST API"])
+    OpenAI(["🤖 OpenAI API — GPT-4o"])
+
+    subgraph API ["⚡ FastAPI Backend — main.py (deployed on Render)"]
+        Analyze["POST /analyze\nCache-first; on miss: fetch → analyze → save\nLogs [profile] timing per stage"]
+        Chat["POST /chat\nQ&A grounded in cached graph + code context"]
+        Recent["GET /recent\nLanding page history"]
+        Clear["DELETE /cache\nInvalidate a cached result"]
+        Health["GET /health\nLiveness probe"]
+        Fetcher["📡 fetcher/github_fetcher.py\nParses URL, fetches tree + file contents\nPriority-selects up to 25 files\nSnippets: 12 files × 2000 chars\nHandles 401 / 403 / 404 / 422 / timeout"]
+        AIModule["🧠 ai_openai.py\nasyncio.gather — both calls in parallel:\n  Call 1 — ANALYSIS_USER prompt:\n    module graph via _modules_to_graph()\n  Call 2 — WORKFLOW_PROMPT:\n    runtime execution steps\nChat — chat_about_repo()\nPrompt injection + crisis detection\nPer-stage [profile] timing logs"]
+    end
+
+    User -->|"browser"| FE
+    FE -->|"POST /analyze"| Analyze
+    FE -->|"POST /chat"| Chat
+    FE -->|"GET /recent"| Recent
+    FE -->|"DELETE /cache"| Clear
+    Analyze -->|"cache hit: read / miss: write"| DB
+    Analyze -->|"on cache miss"| Fetcher
+    Analyze -->|"after fetch"| AIModule
+    Chat --> AIModule
+    AIModule -->|"reads cached graph + code_context"| DB
+    Recent -->|"read"| DB
+    Clear -->|"delete"| DB
+    Fetcher -->|"HTTPS"| GitHub
+    AIModule -->|"HTTPS — 2 calls parallel / analysis\n~7-9s wall time vs ~15-20s sequential\n1 call / chat message"| OpenAI
+
+    style FE fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    style DB fill:#fef3c7,stroke:#f59e0b,color:#451a03
+    style GitHub fill:#f1f5f9,stroke:#94a3b8,color:#334155
+    style OpenAI fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style Analyze fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    style Chat fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    style Recent fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    style Clear fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    style Health fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    style Fetcher fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+    style AIModule fill:#dbeafe,stroke:#3b82f6,color:#1e3a5f
+```
+
+---
+
 ## What the Team Would Do Differently
 
-With another sprint, the team would instrument and profile the full analysis pipeline — from GitHub fetch through the two sequential GPT-4o calls — to pinpoint where latency accumulates and address the biggest bottlenecks before they become a friction point for real users.
+With another sprint, the team would add retry logic with exponential backoff on both OpenAI and GitHub API calls, add path validation to `_modules_to_graph()` so hallucinated module paths are caught before rendering, and introduce per-IP rate limiting on `/api/analyze` to protect the API budget in a production deployment.

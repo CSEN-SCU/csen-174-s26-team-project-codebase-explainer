@@ -4,7 +4,13 @@
 
 **Team:** Sally Kim · Jesse · Daniela
 
-🔗 **Live demo:** 
+🔗 **Live demo:** [https://csen-174-s26-team-project-codebase-od89.onrender.com](https://csen-174-s26-team-project-codebase-od89.onrender.com)
+
+![QR Code](https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://csen-174-s26-team-project-codebase-od89.onrender.com)
+
+## Demo
+
+[![GitMap Demo](https://img.youtube.com/vi/6lrZHqLfREw/maxresdefault.jpg)](https://youtu.be/6lrZHqLfREw)
 
 ---
 
@@ -17,7 +23,6 @@
 5. The frontend renders two views side by side:
    - **Architecture** — an interactive node graph (Cytoscape.js) showing modules color-coded by type (entrypoint, service, database, config, etc.)
    - **Workflow** — an animated SVG diagram showing how data flows step by step through the system
-   - **Full Map** — a Mermaid flowchart of the complete architecture with all edges
 
 You can also ask follow-up questions about the repo in a chat panel powered by the same cached analysis.
 
